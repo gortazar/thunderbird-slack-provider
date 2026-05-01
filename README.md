@@ -29,6 +29,8 @@ A [Thunderbird](https://www.thunderbird.net/) WebExtension that lets you read an
 
 No Node.js or Rust toolchain is required. The extension is pure JavaScript / HTML / CSS.
 
+> **Minimum Thunderbird version: 128.0** (the Supernova UI rework and the stable Spaces API both require Thunderbird 128+).
+
 ### Steps
 
 ```bash

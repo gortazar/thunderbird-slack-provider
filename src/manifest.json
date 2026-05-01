@@ -14,6 +14,7 @@
   },
   "permissions": [
     "storage",
+    "alarms",
     "https://slack.com/api/*",
     "https://files.slack.com/*",
     "https://avatars.slack-edge.com/*"
@@ -25,7 +26,7 @@
   "browser_specific_settings": {
     "gecko": {
       "id": "thunderbird-slack-provider@example.com",
-      "strict_min_version": "91.0"
+      "strict_min_version": "128.0"
     }
   }
 }

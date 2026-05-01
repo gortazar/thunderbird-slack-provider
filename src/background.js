@@ -45,7 +45,7 @@ async function init() {
 // ---------------------------------------------------------------------------
 async function ensureSlackSpace() {
   if (!messenger.spaces) {
-    // Spaces API requires Thunderbird 91+
+    // messenger.spaces is available since Thunderbird 91 and stable in 128+
     console.warn("messenger.spaces is not available in this version of Thunderbird.");
     return;
   }
