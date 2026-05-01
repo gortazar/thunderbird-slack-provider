@@ -1,0 +1,111 @@
+name: Build and Release
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build extension (.xpi)
+    runs-on: ubuntu-latest
+
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      xpi_name: ${{ steps.meta.outputs.xpi_name }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version from manifest
+        id: meta
+        run: |
+          VERSION=$(python3 -c "import json,sys; print(json.load(open('src/manifest.json'))['version'])")
+          XPI_NAME="thunderbird-slack-provider-${VERSION}.xpi"
+          echo "version=${VERSION}"   >> "$GITHUB_OUTPUT"
+          echo "xpi_name=${XPI_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Extension version: ${VERSION}"
+
+      - name: Validate manifest
+        run: |
+          python3 -c "
+          import json, sys
+          with open('src/manifest.json') as f:
+            m = json.load(f)
+          required = ['manifest_version','name','version','background']
+          missing = [k for k in required if k not in m]
+          if missing:
+            sys.exit(f'Missing required manifest keys: {missing}')
+          print('Manifest OK — name:', m['name'], '| version:', m['version'])
+          "
+
+      - name: Package extension
+        run: |
+          mkdir -p dist
+          cd src
+          zip -r "../dist/${{ steps.meta.outputs.xpi_name }}" . \
+            --exclude "*.DS_Store" \
+            --exclude "__MACOSX/*"
+          echo "Built: dist/${{ steps.meta.outputs.xpi_name }}"
+          ls -lh "../dist/${{ steps.meta.outputs.xpi_name }}"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thunderbird-slack-provider-${{ steps.meta.outputs.version }}
+          path: dist/${{ steps.meta.outputs.xpi_name }}
+          if-no-files-found: error
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    # Only run on pushes to main (not on PRs)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: thunderbird-slack-provider-${{ needs.build.outputs.version }}
+          path: dist/
+
+      - name: Delete existing release/tag (if any)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ needs.build.outputs.version }}"
+          # Delete release if it exists (ignore errors)
+          gh release delete "$TAG" --yes 2>/dev/null || true
+          # Delete tag if it exists
+          git push origin --delete "$TAG" 2>/dev/null || true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          name: "Thunderbird Slack Provider v${{ needs.build.outputs.version }}"
+          body: |
+            ## Thunderbird Slack Provider v${{ needs.build.outputs.version }}
+
+            ### Installation
+
+            1. Download the `.xpi` file attached to this release.
+            2. In Thunderbird, open **Tools → Add-ons and Themes**.
+            3. Click the ⚙️ gear icon and choose **Install Add-on From File…**.
+            4. Select the downloaded `.xpi` file.
+            5. After installation, open the extension settings and enter your Slack API token.
+
+            See the [README](https://github.com/${{ github.repository }}#readme) for full instructions including how to create a Slack app and obtain an API token.
+          files: dist/${{ needs.build.outputs.xpi_name }}
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

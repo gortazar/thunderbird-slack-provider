@@ -1,0 +1,31 @@
+{
+  "manifest_version": 2,
+  "name": "Thunderbird Slack Provider",
+  "version": "1.0.0",
+  "description": "Read and send Slack channel messages directly from Thunderbird.",
+  "author": "thunderbird-slack-provider contributors",
+  "icons": {
+    "16": "icons/slack-16.svg",
+    "32": "icons/slack-32.svg",
+    "96": "icons/slack-96.svg"
+  },
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "permissions": [
+    "storage",
+    "https://slack.com/api/*",
+    "https://files.slack.com/*",
+    "https://avatars.slack-edge.com/*"
+  ],
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": false
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "thunderbird-slack-provider@example.com",
+      "strict_min_version": "91.0"
+    }
+  }
+}
