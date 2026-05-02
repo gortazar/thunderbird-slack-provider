@@ -61,7 +61,7 @@ async function clearToken() {
   await messenger.runtime.sendMessage({ type: "set_token", token: null });
   await messenger.storage.local.remove(["slackToken"]);
   document.getElementById("slack-token").value = "";
-  setIndicator("unknown", "Unknown — use "Test Connection" to verify.");
+  setIndicator("unknown", "Unknown \u2014 use \u201cTest Connection\u201d to verify.");
   showStatus("Token cleared.", "info");
 }
 
