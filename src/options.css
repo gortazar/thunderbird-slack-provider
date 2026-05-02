@@ -133,3 +133,25 @@ h1 { font-size: 1.3rem; }
   font-size: 0.85em;
   color: var(--text);
 }
+
+/* ── Checkbox group ──────────────────────────────────────────────────────── */
+.form-group-check { display: flex; flex-direction: column; gap: 8px; }
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+.check-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.form-group-check .help-text { margin-bottom: 0; }

@@ -199,8 +199,9 @@ html, body {
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 12px;
   text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .message-content { flex: 1; min-width: 0; }

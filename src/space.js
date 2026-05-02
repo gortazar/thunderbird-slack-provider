@@ -11,11 +11,16 @@
 // ---------------------------------------------------------------------------
 let currentChannel = null;
 const userCache = {};
+let disableAvatars = false;
 
 // ---------------------------------------------------------------------------
 // Startup
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
+  // Load display preferences
+  const stored = await messenger.storage.local.get(["disableAvatars"]);
+  disableAvatars = !!stored.disableAvatars;
+
   const res = await bg({ type: "get_token" });
   if (res.token) {
     showMain();
@@ -47,6 +52,21 @@ document.addEventListener("DOMContentLoaded", async () => {
 messenger.runtime.onMessage.addListener((msg) => {
   if (msg.type === "unread_updated") {
     refreshUnreadBadges(new Set(msg.unreadChannels));
+  }
+});
+
+// Keep disableAvatars in sync if the user changes it in the options page
+messenger.storage.onChanged.addListener((changes) => {
+  if ("disableAvatars" in changes) {
+    const change = changes.disableAvatars;
+    // newValue is absent when the key is removed — treat that as false (default)
+    const newVal = "newValue" in change ? !!change.newValue : false;
+    if (newVal === disableAvatars) return; // no effective change
+    disableAvatars = newVal;
+    // Re-render the current channel so the change is visible immediately
+    if (currentChannel) {
+      loadMessages(currentChannel.id);
+    }
   }
 });
 
@@ -202,9 +222,13 @@ async function buildMessageElement(msg) {
     const user = await resolveUser(msg.user);
     username = user.profile?.display_name || user.real_name || user.name || msg.user;
     const avatarUrl = user.profile?.image_48 || "";
-    avatarHtml = avatarUrl
-      ? `<img src="${avatarUrl}" alt="${escHtml(username)}" />`
-      : avatarPlaceholder(username);
+    if (!disableAvatars && avatarUrl) {
+      avatarHtml = `<img src="${avatarUrl}" alt="${escHtml(username)}" />`;
+    } else {
+      // Prefer real_name (e.g. "John Doe") for two-letter initials; fall back to name
+      const initialsName = user.real_name || user.name || msg.user;
+      avatarHtml = avatarPlaceholder(initialsName);
+    }
   } else if (msg.bot_profile) {
     username = msg.bot_profile.name || "Bot";
     avatarHtml = avatarPlaceholder(username);
@@ -280,8 +304,19 @@ async function buildMessageElement(msg) {
 }
 
 function avatarPlaceholder(name) {
-  const letter = String(name || "?")[0].toUpperCase();
-  return `<div class="avatar-placeholder">${escHtml(letter)}</div>`;
+  const initials = nameInitials(name);
+  return `<div class="avatar-placeholder">${escHtml(initials)}</div>`;
+}
+
+/** Derive up to two initials from a display name or real name. */
+function nameInitials(name) {
+  const str = String(name || "?").trim();
+  if (!str || str === "?") return "?";
+  const words = str.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return "?";
+  if (words.length === 1) return words[0][0].toUpperCase();
+  // First letter of the first word + first letter of the last word
+  return (words[0][0] + words[words.length - 1][0]).toUpperCase();
 }
 
 // ---------------------------------------------------------------------------
