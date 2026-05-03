@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Slack</title>
+  <link rel="stylesheet" href="space.css" />
+</head>
+<body>
+  <!-- ── Not authenticated ──────────────────────────────────────────── -->
+  <div id="auth-panel" class="hidden">
+    <div class="auth-card">
+      <img src="icons/slack-96.svg" alt="Slack" class="auth-logo" />
+      <h2>Connect to Slack</h2>
+      <p>Please configure your Slack API token in the extension settings to get started.</p>
+      <button id="btn-open-settings" class="btn btn-primary">Open Settings</button>
+    </div>
+  </div>
+
+  <!-- ── Main 3-pane layout ─────────────────────────────────────────── -->
+  <div id="main-panel" class="hidden">
+
+    <!-- Left: channel list -->
+    <nav id="channel-sidebar">
+      <header id="sidebar-header">
+        <img src="icons/slack-16.svg" alt="" class="sidebar-logo" />
+        <span id="workspace-name">Slack</span>
+        <button id="btn-refresh-channels" class="icon-btn" title="Refresh channels">↻</button>
+      </header>
+      <div id="channel-list" role="listbox" aria-label="Channels"></div>
+    </nav>
+
+    <!-- Right: messages + composer -->
+    <main id="content-area">
+      <header id="content-header">
+        <span id="channel-label"># welcome</span>
+      </header>
+
+      <div id="messages-container" role="log" aria-live="polite">
+        <div id="messages-list"></div>
+      </div>
+
+      <footer id="composer">
+        <textarea
+          id="message-input"
+          placeholder="Message #channel — press Enter to send, Shift+Enter for new line"
+          rows="3"
+          aria-label="New message"
+        ></textarea>
+        <button id="btn-send" class="btn btn-primary" aria-label="Send message">Send</button>
+      </footer>
+    </main>
+  </div>
+
+  <script src="space.js"></script>
+</body>
+</html>

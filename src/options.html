@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Thunderbird Slack Provider – Settings</title>
+  <link rel="stylesheet" href="options.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="page-header">
+      <img src="icons/slack-32.svg" alt="" class="header-logo" />
+      <h1>Thunderbird Slack Provider</h1>
+    </header>
+
+    <section class="card">
+      <h2>Authentication</h2>
+
+      <p class="help-text">
+        Enter a Slack <strong>Bot Token</strong> (starts with <code>xoxb-</code>) or
+        <strong>User Token</strong> (starts with <code>xoxp-</code>) below.
+        See the README for step-by-step instructions on creating a Slack app and obtaining a token.
+      </p>
+
+      <div class="form-group">
+        <label for="slack-token">Slack API Token</label>
+        <input
+          type="password"
+          id="slack-token"
+          placeholder="xoxb-…"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="btn-row">
+        <button id="btn-save" class="btn btn-primary">Save Token</button>
+        <button id="btn-test" class="btn btn-secondary">Test Connection</button>
+        <button id="btn-clear" class="btn btn-danger">Clear Token</button>
+      </div>
+
+      <div id="status-msg" class="status-msg hidden" role="status" aria-live="polite"></div>
+    </section>
+
+    <section class="card">
+      <h2>Connection Status</h2>
+      <div class="status-row">
+        <span id="indicator" class="indicator indicator-unknown">●</span>
+        <span id="status-text">Unknown — use "Test Connection" to verify.</span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Display</h2>
+
+      <div class="form-group-check">
+        <label class="check-label">
+          <input type="checkbox" id="disable-avatars" />
+          Disable avatar images — show initials instead
+        </label>
+        <p class="help-text">
+          When enabled, user profile pictures are never loaded and each message
+          shows the author's initials (e.g. <strong>JD</strong> for John Doe).
+        </p>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Required Scopes</h2>
+      <p class="help-text">
+        Your Slack app / token must have the following OAuth scopes granted:
+      </p>
+      <ul class="scope-list">
+        <li><code>channels:read</code> – list public channels</li>
+        <li><code>groups:read</code> – list private channels you're a member of</li>
+        <li><code>channels:history</code> – read messages in public channels</li>
+        <li><code>groups:history</code> – read messages in private channels</li>
+        <li><code>chat:write</code> – send messages</li>
+        <li><code>users:read</code> – resolve user names and avatars</li>
+        <li><code>channels:manage</code> (optional) – mark channels as read</li>
+      </ul>
+    </section>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
