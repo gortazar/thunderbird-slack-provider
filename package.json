@@ -6,11 +6,16 @@
     "test": "jest",
     "test:unit": "jest --testPathPattern=tests/unit",
     "test:integration": "jest --testPathPattern=tests/integration",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "lint": "eslint src/ tests/",
+    "lint:sarif": "eslint src/ tests/ --format @microsoft/eslint-formatter-sarif --output-file eslint-results.sarif || true"
   },
   "devDependencies": {
+    "@microsoft/eslint-formatter-sarif": "^3.1.0",
+    "@playwright/test": "^1.44.0",
+    "eslint": "^10.3.0",
+    "eslint-plugin-security": "^4.0.0",
     "jest": "^29.7.0",
-    "jest-environment-jsdom": "^29.7.0",
-    "@playwright/test": "^1.44.0"
+    "jest-environment-jsdom": "^29.7.0"
   }
 }

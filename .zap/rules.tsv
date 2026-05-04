@@ -1,0 +1,21 @@
+# ZAP baseline rules configuration
+# Format: rule-id\tOK|WARN|FAIL\tComment
+#
+# Rules set to WARN (report only, never fail build):
+#   10015  Incomplete or No Cache-control Header Set  - static file server expected
+#   10096  Timestamp Disclosure - Unix                - expected in HTML responses
+#   10020  X-Frame-Options Header Not Set             - static server, no X-Frame-Options
+#   10021  X-Content-Type-Options Header Missing      - static server
+#   10035  Strict-Transport-Security Header Not Set   - HTTP test server only
+#   10038  Content Security Policy (CSP) Header Not Set - static test server
+#   10055  CSP Scanner                                - static test server
+#   90003  Sub Resource Integrity Attribute Missing   - inline scripts in extension HTML
+
+10015	WARN	Incomplete or No Cache-control Header Set
+10096	WARN	Timestamp Disclosure
+10020	WARN	X-Frame-Options Header Not Set
+10021	WARN	X-Content-Type-Options Header Missing
+10035	WARN	Strict-Transport-Security Header Not Set
+10038	WARN	Content Security Policy (CSP) Header Not Set
+10055	WARN	CSP Scanner
+90003	WARN	Sub Resource Integrity Attribute Missing

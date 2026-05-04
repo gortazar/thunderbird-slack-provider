@@ -13,10 +13,12 @@ __MACOSX/
 
 # npm
 node_modules/
-package-lock.json
 
 # Test artifacts
 coverage/
 test-results/
 playwright-report/
 .playwright/
+
+# Security scan artifacts
+eslint-results.sarif
