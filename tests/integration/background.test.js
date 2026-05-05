@@ -811,7 +811,7 @@ describe("leave_channel", () => {
 // chat account connected – rate-limited mode
 // ---------------------------------------------------------------------------
 describe("chat account connected – rate-limited mode", () => {
-  test("uses watched channels instead of fetching all when rate-limited mode is on", async () => {
+  test("uses watched channels instead of fetching all when rateLimitedMode is enabled", async () => {
     await setToken("xoxb-tok");
     storageChangedHandler({ rateLimitedMode: { newValue: true } });
 
@@ -832,7 +832,7 @@ describe("chat account connected – rate-limited mode", () => {
     expect(mockMessenger.chat.createConversation).toHaveBeenCalledWith("acc-1", "general");
   });
 
-  test("does nothing when rate-limited mode is on and no watched channels are stored", async () => {
+  test("does nothing when rateLimitedMode is enabled and no watched channels are stored", async () => {
     await setToken("xoxb-tok");
     storageChangedHandler({ rateLimitedMode: { newValue: true } });
     mockMessenger.storage.local.get.mockResolvedValue({ watchedChannels: [] });
