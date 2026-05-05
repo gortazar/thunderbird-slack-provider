@@ -198,7 +198,9 @@ async function handleChatMessageSent(conversationId, text) {
   }
 }
 
-
+// ---------------------------------------------------------------------------
+// Polling via alarms
+// ---------------------------------------------------------------------------
 function schedulePolling() {
   messenger.alarms.create(state.pollingAlarmName, {
     delayInMinutes: 0.5,
