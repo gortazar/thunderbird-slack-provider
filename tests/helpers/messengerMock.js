@@ -12,6 +12,9 @@ function createMessengerMock() {
     onMessage: [],
     onAlarm: [],
     onStorageChanged: [],
+    onChatAccountConnected: [],
+    onChatAccountDisconnected: [],
+    onChatMessageSent: [],
   };
 
   const mock = {
@@ -48,6 +51,18 @@ function createMessengerMock() {
     spaces: {
       query: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockResolvedValue({ id: 'space-1' }),
+    },
+    chat: {
+      onAccountConnected: {
+        addListener: jest.fn((fn) => listeners.onChatAccountConnected.push(fn)),
+      },
+      onAccountDisconnected: {
+        addListener: jest.fn((fn) => listeners.onChatAccountDisconnected.push(fn)),
+      },
+      onMessageSent: {
+        addListener: jest.fn((fn) => listeners.onChatMessageSent.push(fn)),
+      },
+      createConversation: jest.fn().mockResolvedValue({ id: 'conv-1' }),
     },
 
     // Expose captured listeners for test use
