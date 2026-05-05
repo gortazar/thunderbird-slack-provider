@@ -73,6 +73,9 @@ messenger.runtime.onMessage.addListener((msg) => {
   if (msg.type === "unread_updated") {
     refreshUnreadBadges(new Set(msg.unreadChannels));
   }
+  if (msg.type === "no_watched_channels") {
+    loadChannels();
+  }
 });
 
 // Keep preferences in sync when changed via the options page
@@ -80,7 +83,7 @@ messenger.storage.onChanged.addListener((changes) => {
   if ("disableAvatars" in changes) {
     const change = changes.disableAvatars;
     const newVal = "newValue" in change ? !!change.newValue : false;
-    if (newVal === disableAvatars) return;
+    if (newVal === disableAvatars) { return; }
     disableAvatars = newVal;
     if (currentChannel) {
       loadMessages(currentChannel.id);
@@ -304,7 +307,7 @@ function showChannelContextMenu(channel, x, y) {
         label: "Unsubscribe",
         danger: true,
         action: async () => {
-          if (!window.confirm(`Leave #${channel.name}? This will remove you from the channel in Slack.`)) return;
+          if (!window.confirm(`Leave #${channel.name}? This will remove you from the channel in Slack.`)) { return; }
           const res = await bg({ type: "leave_channel", channelId: channel.id });
           if (res.error) {
             alert(`Failed to leave channel: ${res.error}`);
@@ -341,7 +344,7 @@ function hideAddChannelDialog() {
 
 async function addChannel() {
   const input = document.getElementById("add-channel-input").value.trim();
-  if (!input) return;
+  if (!input) { return; }
 
   const errorEl = document.getElementById("add-channel-error");
   const confirmBtn = document.getElementById("btn-add-channel-confirm");

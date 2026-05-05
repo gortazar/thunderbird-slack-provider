@@ -844,5 +844,7 @@ describe("chat account connected – rate-limited mode", () => {
       url.includes("conversations.list")
     );
     expect(listCall).toBeUndefined();
+    // Should notify the space UI so the hint is visible to the user
+    expect(mockMessenger.runtime.sendMessage).toHaveBeenCalledWith({ type: "no_watched_channels" });
   });
 });

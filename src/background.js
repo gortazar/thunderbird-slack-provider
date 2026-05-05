@@ -153,6 +153,12 @@ async function handleChatAccountConnected(account) {
           "Rate-limited mode: no watched channels configured. " +
           "Use the Slack space to add channels via the workspace context menu."
         );
+        // Notify any open space tab so the user sees the hint in the UI too
+        try {
+          await messenger.runtime.sendMessage({ type: "no_watched_channels" });
+        } catch (_) {
+          // No space tab open yet – the hint will appear when it's first opened
+        }
         return;
       }
     } else {
