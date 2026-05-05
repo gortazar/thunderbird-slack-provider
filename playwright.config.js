@@ -7,7 +7,7 @@ module.exports = defineConfig({
   use: {
     baseURL: "http://localhost:3456",
     headless: true,
-    screenshot: "on",
+    screenshot: "only-on-failure",
   },
   webServer: {
     command: "node tests/e2e/server.js",
