@@ -6,13 +6,14 @@
 
 document.addEventListener("DOMContentLoaded", async () => {
   // Load current token (we only show that one is set, not the value itself)
-  const stored = await messenger.storage.local.get(["slackToken", "disableAvatars"]);
+  const stored = await messenger.storage.local.get(["slackToken", "disableAvatars", "rateLimitedMode"]);
   if (stored.slackToken) {
     document.getElementById("slack-token").value = stored.slackToken;
     setIndicator("ok", "Token loaded from storage.");
   }
 
   document.getElementById("disable-avatars").checked = !!stored.disableAvatars;
+  document.getElementById("rate-limited-mode").checked = !!stored.rateLimitedMode;
 
   document.getElementById("btn-save").addEventListener("click", saveToken);
   document.getElementById("btn-test").addEventListener("click", testConnection);
@@ -20,6 +21,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   document.getElementById("disable-avatars").addEventListener("change", async (e) => {
     await messenger.storage.local.set({ disableAvatars: e.target.checked });
+  });
+
+  document.getElementById("rate-limited-mode").addEventListener("change", async (e) => {
+    await messenger.storage.local.set({ rateLimitedMode: e.target.checked });
   });
 });
 
