@@ -19,9 +19,8 @@ let state = {
   unreadChannels: new Set(),
   pollingAlarmName: "slack-poll",
   rateLimitedMode: false,
-  // chat: map of Slack channel id → Thunderbird conversation id
-  chatConversations: new Map(),
-  chatAccountId: null,
+  // chat: keyed by account id → { token, conversations: Map<channelId, convId> }
+  chatAccounts: new Map(),
 };
 
 // ---------------------------------------------------------------------------
@@ -124,7 +123,7 @@ function registerChatProtocol() {
 async function handleChatAccountConnected(account) {
   // Prefer the per-account token stored in the account options; fall back to
   // the token previously saved via the options page.
-  const accountToken = account.options && account.options.token
+  const accountToken = (account.options && account.options.token)
     ? account.options.token
     : state.token;
 
@@ -133,57 +132,57 @@ async function handleChatAccountConnected(account) {
     return;
   }
 
-  // Temporarily use this account's token for Slack API calls.
-  const previousToken = state.token;
-  state.token = accountToken;
+  // Initialise per-account state up-front so that onMessageSent can find it
+  // even if the channel fetch is still in progress.
+  const accountState = { token: accountToken, conversations: new Map() };
+  state.chatAccounts.set(account.id, accountState);
 
   try {
-    state.chatAccountId = account.id;
-    state.chatConversations.clear();
-
-    const channels = await fetchAllChannels();
+    // Pass the account's token directly to avoid mutating global state and
+    // introducing races with concurrent polling or UI requests.
+    const channels = await fetchAllChannels(accountToken);
     const joined = channels.filter((ch) => ch.is_member);
 
     for (const ch of joined) {
       try {
         const conv = await messenger.chat.createConversation(account.id, ch.name);
-        state.chatConversations.set(ch.id, conv.id);
+        accountState.conversations.set(ch.id, conv.id);
       } catch (e) {
         console.error(`Failed to create conversation for #${ch.name}:`, e);
       }
     }
   } catch (e) {
     console.error("Failed to set up Slack chat account:", e);
-  } finally {
-    state.token = previousToken;
+    state.chatAccounts.delete(account.id);
   }
 }
 
 /**
- * Called when the user disconnects the Slack chat account.
- * Clears the in-memory conversation map.
+ * Called when the user disconnects a Slack chat account.
+ * Removes the account's entry from the in-memory map.
  */
 function handleChatAccountDisconnected(account) {
-  if (state.chatAccountId === account.id) {
-    state.chatAccountId = null;
-    state.chatConversations.clear();
-  }
+  state.chatAccounts.delete(account.id);
 }
 
 /**
  * Called when the user sends a message from a Thunderbird chat conversation.
- * Looks up the Slack channel id for the conversation and posts the message.
+ * Finds the account that owns the conversation and posts the message using
+ * that account's token.
  */
 async function handleChatMessageSent(conversationId, text) {
-  if (!state.token) return;
-
-  // Reverse-look up the Slack channel id from the conversation id.
+  // Find which account owns this conversation and get its token.
   let slackChannelId = null;
-  for (const [channelId, convId] of state.chatConversations) {
-    if (convId === conversationId) {
-      slackChannelId = channelId;
-      break;
+  let accountToken = null;
+  for (const [, accountState] of state.chatAccounts) {
+    for (const [channelId, convId] of accountState.conversations) {
+      if (convId === conversationId) {
+        slackChannelId = channelId;
+        accountToken = accountState.token;
+        break;
+      }
     }
+    if (slackChannelId) { break; }
   }
 
   if (!slackChannelId) {
@@ -192,7 +191,7 @@ async function handleChatMessageSent(conversationId, text) {
   }
 
   try {
-    await slackPost("chat.postMessage", { channel: slackChannelId, text });
+    await slackPost("chat.postMessage", { channel: slackChannelId, text }, accountToken);
   } catch (e) {
     console.error("Failed to send Slack message from chat:", e);
   }
@@ -247,12 +246,13 @@ function sleep(ms) {
 
 const RATE_LIMIT_DELAY_MS = 1000;
 
-async function slackPost(method, params = {}) {
-  if (!state.token) throw new Error("No Slack token configured.");
+async function slackPost(method, params = {}, token = null) {
+  const useToken = token || state.token;
+  if (!useToken) throw new Error("No Slack token configured.");
   const resp = await fetch(`${SLACK_API}/${method}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${state.token}`,
+      Authorization: `Bearer ${useToken}`,
       "Content-Type": "application/json; charset=utf-8",
     },
     body: JSON.stringify(params),
@@ -265,7 +265,8 @@ async function slackPost(method, params = {}) {
 // Paginate through all channels.
 // In rate-limited mode each page uses a smaller batch size and a short delay
 // is inserted between successive requests to stay within Slack's Tier-2 limit.
-async function fetchAllChannels() {
+// An explicit token can be provided to avoid touching global state.
+async function fetchAllChannels(token = null) {
   const channels = [];
   let cursor = undefined;
   let isFirstRequest = true;
@@ -280,7 +281,7 @@ async function fetchAllChannels() {
       exclude_archived: true,
     };
     if (cursor) params.cursor = cursor;
-    const data = await slackPost("conversations.list", params);
+    const data = await slackPost("conversations.list", params, token);
     channels.push(...(data.channels || []));
     cursor = data.response_metadata?.next_cursor || undefined;
   } while (cursor);
