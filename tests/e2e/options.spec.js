@@ -363,3 +363,126 @@ test.describe("space.html", () => {
     await expect(img).toBeVisible();
   });
 });
+
+// ---------------------------------------------------------------------------
+// space.html – v1.2.0 visual appearance
+// ---------------------------------------------------------------------------
+test.describe("space.html – v1.2.0 visual appearance", () => {
+  test("workspace header shows workspace name in channel list", async ({ page }, testInfo) => {
+    await goToSpace(page, {
+      responses: {
+        get_token: { token: "SET" },
+        get_workspace_name: { name: "Acme Corp" },
+        get_channels: {
+          channels: [
+            { id: "C001", name: "general", is_member: true, is_private: false },
+            { id: "C002", name: "random", is_member: true, is_private: false },
+          ],
+        },
+        get_unread: { unreadChannels: [] },
+      },
+    });
+    await expect(page.locator(".workspace-header")).toBeVisible();
+    await expect(page.locator(".workspace-name")).toContainText("Acme Corp");
+    await expect(page.locator(".channel-item")).toHaveCount(2);
+    await page.screenshot({ path: testInfo.outputPath("workspace-header.png") });
+  });
+
+  test("workspace ⋮ button opens context menu on hover", async ({ page }, testInfo) => {
+    await goToSpace(page, {
+      responses: {
+        get_token: { token: "SET" },
+        get_workspace_name: { name: "Acme Corp" },
+        get_channels: {
+          channels: [
+            { id: "C001", name: "general", is_member: true, is_private: false },
+          ],
+        },
+        get_unread: { unreadChannels: [] },
+      },
+    });
+    await expect(page.locator(".workspace-header")).toBeVisible();
+    // Hover reveals the ⋮ button (opacity: 0 → 1 on :hover)
+    await page.locator(".workspace-header").hover();
+    await page.screenshot({ path: testInfo.outputPath("workspace-header-hover.png") });
+    await page.locator(".workspace-menu-btn").click();
+    await expect(page.locator("#context-menu")).not.toHaveClass(/hidden/);
+    await page.screenshot({ path: testInfo.outputPath("workspace-context-menu.png") });
+  });
+
+  test("Add Channel dialog opens from workspace context menu", async ({ page }, testInfo) => {
+    await goToSpace(page, {
+      responses: {
+        get_token: { token: "SET" },
+        get_workspace_name: { name: "Acme Corp" },
+        get_channels: {
+          channels: [
+            { id: "C001", name: "general", is_member: true, is_private: false },
+          ],
+        },
+        get_unread: { unreadChannels: [] },
+      },
+    });
+    await expect(page.locator(".workspace-header")).toBeVisible();
+    await page.locator(".workspace-header").hover();
+    await page.locator(".workspace-menu-btn").click();
+    await page.locator(".context-menu-item").filter({ hasText: "Add Channel" }).click();
+    await expect(page.locator("#add-channel-dialog")).not.toHaveClass(/hidden/);
+    await page.screenshot({ path: testInfo.outputPath("add-channel-dialog.png") });
+  });
+
+  test("channel context menu opens on right-click", async ({ page }, testInfo) => {
+    await goToSpace(page, {
+      responses: {
+        get_token: { token: "SET" },
+        get_workspace_name: { name: "Acme Corp" },
+        get_channels: {
+          channels: [
+            { id: "C001", name: "general", is_member: true, is_private: false },
+          ],
+        },
+        get_unread: { unreadChannels: [] },
+      },
+    });
+    await expect(page.locator(".channel-item")).toHaveCount(1);
+    await page.locator(".channel-item").filter({ hasText: "general" }).click({ button: "right" });
+    await expect(page.locator("#context-menu")).not.toHaveClass(/hidden/);
+    await page.screenshot({ path: testInfo.outputPath("channel-context-menu.png") });
+  });
+
+  test("rate-limited mode: shows 'No channels added yet' hint when no watched channels", async ({ page }, testInfo) => {
+    await goToSpace(page, {
+      storageData: { rateLimitedMode: true },
+      responses: {
+        get_token: { token: "SET" },
+        get_workspace_name: { name: "Acme Corp" },
+        get_watched_channels: { channels: [] },
+        get_unread: { unreadChannels: [] },
+      },
+    });
+    const hint = page.locator("#channel-list .status-msg");
+    await expect(hint).toContainText("No channels added yet");
+    await page.screenshot({ path: testInfo.outputPath("rate-limited-no-channels.png") });
+  });
+
+  test("rate-limited mode: renders watched channels", async ({ page }, testInfo) => {
+    await goToSpace(page, {
+      storageData: { rateLimitedMode: true },
+      responses: {
+        get_token: { token: "SET" },
+        get_workspace_name: { name: "Acme Corp" },
+        get_watched_channels: {
+          channels: [
+            { id: "C001", name: "general", is_member: true, is_private: false },
+            { id: "C002", name: "announcements", is_member: true, is_private: false },
+          ],
+        },
+        get_unread: { unreadChannels: [] },
+      },
+    });
+    await expect(page.locator(".channel-item")).toHaveCount(2);
+    await expect(page.locator("#channel-list")).toContainText("general");
+    await expect(page.locator("#channel-list")).toContainText("announcements");
+    await page.screenshot({ path: testInfo.outputPath("rate-limited-with-channels.png") });
+  });
+});
