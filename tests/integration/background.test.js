@@ -17,12 +17,18 @@ const BACKGROUND = path.resolve(__dirname, "../../src/background.js");
 let messageHandler;
 let alarmHandler;
 let storageChangedHandler;
+let chatAccountConnectedHandler;
+let chatAccountDisconnectedHandler;
+let chatMessageSentHandler;
 let mockMessenger;
 
 function createMockMessenger() {
   messageHandler = null;
   alarmHandler = null;
   storageChangedHandler = null;
+  chatAccountConnectedHandler = null;
+  chatAccountDisconnectedHandler = null;
+  chatMessageSentHandler = null;
 
   return {
     runtime: {
@@ -59,6 +65,24 @@ function createMockMessenger() {
     spaces: {
       query: jest.fn().mockResolvedValue([]),
       create: jest.fn().mockResolvedValue({ id: "space-1" }),
+    },
+    chat: {
+      onAccountConnected: {
+        addListener: jest.fn((fn) => {
+          chatAccountConnectedHandler = fn;
+        }),
+      },
+      onAccountDisconnected: {
+        addListener: jest.fn((fn) => {
+          chatAccountDisconnectedHandler = fn;
+        }),
+      },
+      onMessageSent: {
+        addListener: jest.fn((fn) => {
+          chatMessageSentHandler = fn;
+        }),
+      },
+      createConversation: jest.fn().mockResolvedValue({ id: "conv-1" }),
     },
   };
 }
@@ -507,5 +531,135 @@ describe("rate-limited mode", () => {
     const [, options] = global.fetch.mock.calls[0];
     const body = JSON.parse(options.body);
     expect(body.limit).toBe(20);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Chat protocol
+// ---------------------------------------------------------------------------
+describe("chat protocol registration", () => {
+  test("registers all three chat event listeners on init", () => {
+    expect(mockMessenger.chat.onAccountConnected.addListener).toHaveBeenCalledTimes(1);
+    expect(mockMessenger.chat.onAccountDisconnected.addListener).toHaveBeenCalledTimes(1);
+    expect(mockMessenger.chat.onMessageSent.addListener).toHaveBeenCalledTimes(1);
+  });
+
+  test("skips chat registration when messenger.chat is absent", () => {
+    delete mockMessenger.chat;
+    // Re-loading background.js with no messenger.chat should not throw
+    expect(() => loadBackground()).not.toThrow();
+  });
+});
+
+describe("chat account connected", () => {
+  test("creates a conversation for each joined channel", async () => {
+    await setToken("xoxb-tok");
+
+    const channels = [
+      { id: "C001", name: "general", is_member: true },
+      { id: "C002", name: "random", is_member: true },
+      { id: "C003", name: "not-joined", is_member: false },
+    ];
+    mockSlackApi({ "conversations.list": { ok: true, channels, response_metadata: {} } });
+
+    await chatAccountConnectedHandler({ id: "acc-1", options: {} });
+
+    expect(mockMessenger.chat.createConversation).toHaveBeenCalledTimes(2);
+    expect(mockMessenger.chat.createConversation).toHaveBeenCalledWith("acc-1", "general");
+    expect(mockMessenger.chat.createConversation).toHaveBeenCalledWith("acc-1", "random");
+  });
+
+  test("uses per-account token when provided in account options", async () => {
+    const channels = [{ id: "C001", name: "general", is_member: true }];
+    mockSlackApi({ "conversations.list": { ok: true, channels, response_metadata: {} } });
+
+    await chatAccountConnectedHandler({ id: "acc-2", options: { token: "xoxb-account-token" } });
+
+    // The API call should have been made (token was available via account options)
+    expect(mockMessenger.chat.createConversation).toHaveBeenCalledWith("acc-2", "general");
+  });
+
+  test("does nothing when no token is available", async () => {
+    await chatAccountConnectedHandler({ id: "acc-3", options: {} });
+
+    expect(mockMessenger.chat.createConversation).not.toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("chat account disconnected", () => {
+  test("clears chat state when the active account disconnects", async () => {
+    await setToken("xoxb-tok");
+    const channels = [{ id: "C001", name: "general", is_member: true }];
+    mockSlackApi({ "conversations.list": { ok: true, channels, response_metadata: {} } });
+
+    await chatAccountConnectedHandler({ id: "acc-1", options: {} });
+    expect(mockMessenger.chat.createConversation).toHaveBeenCalledTimes(1);
+
+    chatAccountDisconnectedHandler({ id: "acc-1" });
+
+    // After disconnect, sending a message should be a no-op (no channel mapping)
+    global.fetch = jest.fn();
+    await chatMessageSentHandler("conv-1", "hello");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test("ignores disconnect events for a different account id", async () => {
+    await setToken("xoxb-tok");
+    const channels = [{ id: "C001", name: "general", is_member: true }];
+    mockSlackApi({ "conversations.list": { ok: true, channels, response_metadata: {} } });
+
+    await chatAccountConnectedHandler({ id: "acc-1", options: {} });
+    mockMessenger.chat.createConversation.mockClear();
+
+    // Disconnect a different account — should not clear the active account state
+    chatAccountDisconnectedHandler({ id: "acc-999" });
+
+    // The conversation map should still be intact: posting should route to Slack
+    mockSlackApi({ "chat.postMessage": { ok: true, message: {} } });
+    await chatMessageSentHandler("conv-1", "still works");
+    const calls = global.fetch.mock.calls.filter(([url]) => url.includes("chat.postMessage"));
+    expect(calls).toHaveLength(1);
+  });
+});
+
+describe("chat message sent", () => {
+  test("posts to the correct Slack channel when a message is sent", async () => {
+    await setToken("xoxb-tok");
+
+    let convIdCounter = 0;
+    mockMessenger.chat.createConversation.mockImplementation((_accountId, name) => {
+      convIdCounter++;
+      return Promise.resolve({ id: `conv-${convIdCounter}` });
+    });
+
+    const channels = [
+      { id: "C001", name: "general", is_member: true },
+      { id: "C002", name: "random", is_member: true },
+    ];
+    mockSlackApi({ "conversations.list": { ok: true, channels, response_metadata: {} } });
+    await chatAccountConnectedHandler({ id: "acc-1", options: {} });
+
+    mockSlackApi({ "chat.postMessage": { ok: true, message: {} } });
+    await chatMessageSentHandler("conv-2", "hello random");
+
+    const postCall = global.fetch.mock.calls.find(([url]) => url.includes("chat.postMessage"));
+    expect(postCall).toBeDefined();
+    const body = JSON.parse(postCall[1].body);
+    expect(body.channel).toBe("C002");
+    expect(body.text).toBe("hello random");
+  });
+
+  test("does nothing when no matching conversation is found", async () => {
+    await setToken("xoxb-tok");
+    global.fetch = jest.fn();
+    await chatMessageSentHandler("conv-unknown", "hello");
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  test("does nothing when no token is set", async () => {
+    global.fetch = jest.fn();
+    await chatMessageSentHandler("conv-1", "hello");
+    expect(global.fetch).not.toHaveBeenCalled();
   });
 });

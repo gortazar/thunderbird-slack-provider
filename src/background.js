@@ -19,6 +19,9 @@ let state = {
   unreadChannels: new Set(),
   pollingAlarmName: "slack-poll",
   rateLimitedMode: false,
+  // chat: map of Slack channel id → Thunderbird conversation id
+  chatConversations: new Map(),
+  chatAccountId: null,
 };
 
 // ---------------------------------------------------------------------------
@@ -49,6 +52,10 @@ messenger.storage.onChanged.addListener((changes) => {
   }
 });
 
+// Register chat protocol event listeners at module load so they are always
+// active, independent of the init() lifecycle.
+registerChatProtocol();
+
 // ---------------------------------------------------------------------------
 // Spaces API – add Slack to Thunderbird's spaces toolbar
 // ---------------------------------------------------------------------------
@@ -78,8 +85,120 @@ async function ensureSlackSpace() {
 }
 
 // ---------------------------------------------------------------------------
-// Polling via alarms
+// Chat protocol – register Slack as a Thunderbird chat connection type
 // ---------------------------------------------------------------------------
+
+/**
+ * Registers event listeners for the Thunderbird chat protocol.
+ * The protocol itself is declared in manifest.json under "chat_protocols".
+ * These listeners drive the account lifecycle: connecting, disconnecting, and
+ * forwarding outgoing messages to the Slack API.
+ */
+function registerChatProtocol() {
+  if (!messenger.chat) {
+    // messenger.chat is available in Thunderbird 128+ when the "chat" permission
+    // is granted.  Gracefully degrade on older builds.
+    console.warn("messenger.chat is not available in this version of Thunderbird.");
+    return;
+  }
+
+  messenger.chat.onAccountConnected.addListener(async (account) => {
+    await handleChatAccountConnected(account);
+  });
+
+  messenger.chat.onAccountDisconnected.addListener((account) => {
+    handleChatAccountDisconnected(account);
+  });
+
+  messenger.chat.onMessageSent.addListener(async (conversationId, text) => {
+    await handleChatMessageSent(conversationId, text);
+  });
+}
+
+/**
+ * Called when the user connects a Slack chat account.
+ * Reads the token from the account options (falling back to the globally
+ * stored token), fetches the joined channels and opens a Thunderbird
+ * conversation for each one.
+ */
+async function handleChatAccountConnected(account) {
+  // Prefer the per-account token stored in the account options; fall back to
+  // the token previously saved via the options page.
+  const accountToken = account.options && account.options.token
+    ? account.options.token
+    : state.token;
+
+  if (!accountToken) {
+    console.warn("Slack chat account connected but no API token is configured.");
+    return;
+  }
+
+  // Temporarily use this account's token for Slack API calls.
+  const previousToken = state.token;
+  state.token = accountToken;
+
+  try {
+    state.chatAccountId = account.id;
+    state.chatConversations.clear();
+
+    const channels = await fetchAllChannels();
+    const joined = channels.filter((ch) => ch.is_member);
+
+    for (const ch of joined) {
+      try {
+        const conv = await messenger.chat.createConversation(account.id, ch.name);
+        state.chatConversations.set(ch.id, conv.id);
+      } catch (e) {
+        console.error(`Failed to create conversation for #${ch.name}:`, e);
+      }
+    }
+  } catch (e) {
+    console.error("Failed to set up Slack chat account:", e);
+  } finally {
+    state.token = previousToken;
+  }
+}
+
+/**
+ * Called when the user disconnects the Slack chat account.
+ * Clears the in-memory conversation map.
+ */
+function handleChatAccountDisconnected(account) {
+  if (state.chatAccountId === account.id) {
+    state.chatAccountId = null;
+    state.chatConversations.clear();
+  }
+}
+
+/**
+ * Called when the user sends a message from a Thunderbird chat conversation.
+ * Looks up the Slack channel id for the conversation and posts the message.
+ */
+async function handleChatMessageSent(conversationId, text) {
+  if (!state.token) return;
+
+  // Reverse-look up the Slack channel id from the conversation id.
+  let slackChannelId = null;
+  for (const [channelId, convId] of state.chatConversations) {
+    if (convId === conversationId) {
+      slackChannelId = channelId;
+      break;
+    }
+  }
+
+  if (!slackChannelId) {
+    console.warn("No Slack channel found for conversation", conversationId);
+    return;
+  }
+
+  try {
+    await slackPost("chat.postMessage", { channel: slackChannelId, text });
+  } catch (e) {
+    console.error("Failed to send Slack message from chat:", e);
+  }
+}
+
+
 function schedulePolling() {
   messenger.alarms.create(state.pollingAlarmName, {
     delayInMinutes: 0.5,
