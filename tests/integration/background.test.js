@@ -681,3 +681,168 @@ describe("chat message sent", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// get_workspace_name
+// ---------------------------------------------------------------------------
+describe("get_workspace_name", () => {
+  test("returns team name from auth.test", async () => {
+    await setToken("xoxb-tok");
+    mockSlackApi({ "auth.test": { ok: true, team: "ACME Corp", user: "alice" } });
+
+    const result = await messageHandler({ type: "get_workspace_name" });
+    expect(result).toEqual({ name: "ACME Corp" });
+  });
+
+  test("returns error when no token is set", async () => {
+    const result = await messageHandler({ type: "get_workspace_name" });
+    expect(result.error).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// get_watched_channels / add_watched_channel / remove_watched_channel
+// ---------------------------------------------------------------------------
+describe("watched channels", () => {
+  test("get_watched_channels returns empty array when nothing is stored", async () => {
+    const result = await messageHandler({ type: "get_watched_channels" });
+    expect(result).toEqual({ channels: [] });
+  });
+
+  test("add_watched_channel persists a channel and returns updated list", async () => {
+    const ch = { id: "C001", name: "general", is_private: false, is_member: true };
+
+    // Simulate storage: first get returns empty, set is a no-op
+    mockMessenger.storage.local.get.mockResolvedValue({ watchedChannels: [] });
+    mockMessenger.storage.local.set.mockResolvedValue({});
+
+    const result = await messageHandler({ type: "add_watched_channel", channel: ch });
+    expect(result.success).toBe(true);
+    expect(result.channels).toContainEqual(ch);
+    expect(mockMessenger.storage.local.set).toHaveBeenCalledWith({
+      watchedChannels: [ch],
+    });
+  });
+
+  test("add_watched_channel does not add duplicates", async () => {
+    const ch = { id: "C001", name: "general", is_private: false, is_member: true };
+    mockMessenger.storage.local.get.mockResolvedValue({ watchedChannels: [ch] });
+    mockMessenger.storage.local.set.mockResolvedValue({});
+
+    const result = await messageHandler({ type: "add_watched_channel", channel: ch });
+    expect(result.channels).toHaveLength(1);
+    // storage.set should NOT be called since nothing changed
+    expect(mockMessenger.storage.local.set).not.toHaveBeenCalled();
+  });
+
+  test("remove_watched_channel removes the channel by id", async () => {
+    const channels = [
+      { id: "C001", name: "general" },
+      { id: "C002", name: "random" },
+    ];
+    mockMessenger.storage.local.get.mockResolvedValue({ watchedChannels: channels });
+    mockMessenger.storage.local.set.mockResolvedValue({});
+
+    const result = await messageHandler({ type: "remove_watched_channel", channelId: "C001" });
+    expect(result.success).toBe(true);
+    expect(result.channels).toHaveLength(1);
+    expect(result.channels[0].id).toBe("C002");
+    expect(mockMessenger.storage.local.set).toHaveBeenCalledWith({
+      watchedChannels: [{ id: "C002", name: "random" }],
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// get_channel_info
+// ---------------------------------------------------------------------------
+describe("get_channel_info", () => {
+  test("returns channel data from conversations.info", async () => {
+    await setToken("xoxb-tok");
+    const channel = { id: "C001", name: "general", is_member: true, is_private: false };
+    mockSlackApi({ "conversations.info": { ok: true, channel } });
+
+    const result = await messageHandler({ type: "get_channel_info", channelId: "C001" });
+    expect(result.channel).toEqual(channel);
+  });
+
+  test("returns error when channel not found", async () => {
+    await setToken("xoxb-tok");
+    mockSlackApi({ "conversations.info": { ok: false, error: "channel_not_found" } });
+
+    const result = await messageHandler({ type: "get_channel_info", channelId: "CBAD" });
+    expect(result.error).toContain("channel_not_found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// leave_channel
+// ---------------------------------------------------------------------------
+describe("leave_channel", () => {
+  test("calls conversations.leave and removes channel from watched list", async () => {
+    await setToken("xoxb-tok");
+    mockSlackApi({ "conversations.leave": { ok: true } });
+    mockMessenger.storage.local.get.mockResolvedValue({
+      watchedChannels: [{ id: "C001", name: "general" }],
+    });
+    mockMessenger.storage.local.set.mockResolvedValue({});
+
+    const result = await messageHandler({ type: "leave_channel", channelId: "C001" });
+    expect(result.success).toBe(true);
+
+    const leaveCall = global.fetch.mock.calls.find(([url]) =>
+      url.includes("conversations.leave")
+    );
+    expect(leaveCall).toBeDefined();
+
+    expect(mockMessenger.storage.local.set).toHaveBeenCalledWith({ watchedChannels: [] });
+  });
+
+  test("returns error when leave fails", async () => {
+    await setToken("xoxb-tok");
+    mockSlackApi({ "conversations.leave": { ok: false, error: "cant_leave_general" } });
+
+    const result = await messageHandler({ type: "leave_channel", channelId: "C001" });
+    expect(result.error).toContain("cant_leave_general");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// chat account connected – rate-limited mode
+// ---------------------------------------------------------------------------
+describe("chat account connected – rate-limited mode", () => {
+  test("uses watched channels instead of fetching all when rate-limited mode is on", async () => {
+    await setToken("xoxb-tok");
+    storageChangedHandler({ rateLimitedMode: { newValue: true } });
+
+    const watchedChannels = [
+      { id: "C001", name: "general", is_member: true },
+    ];
+    mockMessenger.storage.local.get.mockResolvedValue({ watchedChannels });
+
+    await chatAccountConnectedHandler({ id: "acc-1", options: {} });
+
+    // Should NOT have called conversations.list
+    const listCall = global.fetch.mock.calls.find(([url]) =>
+      url.includes("conversations.list")
+    );
+    expect(listCall).toBeUndefined();
+
+    // Should have created a conversation for the watched channel
+    expect(mockMessenger.chat.createConversation).toHaveBeenCalledWith("acc-1", "general");
+  });
+
+  test("does nothing when rate-limited mode is on and no watched channels are stored", async () => {
+    await setToken("xoxb-tok");
+    storageChangedHandler({ rateLimitedMode: { newValue: true } });
+    mockMessenger.storage.local.get.mockResolvedValue({ watchedChannels: [] });
+
+    await chatAccountConnectedHandler({ id: "acc-1", options: {} });
+
+    expect(mockMessenger.chat.createConversation).not.toHaveBeenCalled();
+    const listCall = global.fetch.mock.calls.find(([url]) =>
+      url.includes("conversations.list")
+    );
+    expect(listCall).toBeUndefined();
+  });
+});

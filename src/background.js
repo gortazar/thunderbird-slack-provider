@@ -119,6 +119,10 @@ function registerChatProtocol() {
  * Reads the token from the account options (falling back to the globally
  * stored token), fetches the joined channels and opens a Thunderbird
  * conversation for each one.
+ *
+ * In rate-limited mode the full channel list is never fetched on connect.
+ * Instead, only channels the user has already added to the watched list
+ * (via the Slack space UI) are opened as conversations.
  */
 async function handleChatAccountConnected(account) {
   // Prefer the per-account token stored in the account options; fall back to
@@ -138,10 +142,25 @@ async function handleChatAccountConnected(account) {
   state.chatAccounts.set(account.id, accountState);
 
   try {
-    // Pass the account's token directly to avoid mutating global state and
-    // introducing races with concurrent polling or UI requests.
-    const channels = await fetchAllChannels(accountToken);
-    const joined = channels.filter((ch) => ch.is_member);
+    let joined;
+    if (state.rateLimitedMode) {
+      // In rate-limited mode avoid fetching all channels.  Use only the
+      // channels the user has explicitly added via the watched list.
+      const stored = await messenger.storage.local.get(["watchedChannels"]);
+      joined = (stored.watchedChannels || []).filter((ch) => ch.is_member !== false);
+      if (joined.length === 0) {
+        console.info(
+          "Rate-limited mode: no watched channels configured. " +
+          "Use the Slack space to add channels via the workspace context menu."
+        );
+        return;
+      }
+    } else {
+      // Pass the account's token directly to avoid mutating global state and
+      // introducing races with concurrent polling or UI requests.
+      const channels = await fetchAllChannels(accountToken);
+      joined = channels.filter((ch) => ch.is_member);
+    }
 
     for (const ch of joined) {
       try {
@@ -294,6 +313,50 @@ async function fetchAllChannels(token = null) {
 messenger.runtime.onMessage.addListener(async (msg) => {
   try {
     switch (msg.type) {
+      // ---- Workspace ---------------------------------------------------
+      case "get_workspace_name": {
+        const data = await slackPost("auth.test", {});
+        return { name: data.team };
+      }
+
+      // ---- Watched channels (rate-limited mode) ------------------------
+      case "get_watched_channels": {
+        const stored = await messenger.storage.local.get(["watchedChannels"]);
+        return { channels: stored.watchedChannels || [] };
+      }
+
+      case "add_watched_channel": {
+        const stored = await messenger.storage.local.get(["watchedChannels"]);
+        const existing = stored.watchedChannels || [];
+        if (!existing.find((c) => c.id === msg.channel.id)) {
+          existing.push(msg.channel);
+          await messenger.storage.local.set({ watchedChannels: existing });
+        }
+        return { success: true, channels: existing };
+      }
+
+      case "remove_watched_channel": {
+        const stored = await messenger.storage.local.get(["watchedChannels"]);
+        const updated = (stored.watchedChannels || []).filter((c) => c.id !== msg.channelId);
+        await messenger.storage.local.set({ watchedChannels: updated });
+        return { success: true, channels: updated };
+      }
+
+      // ---- Channel lookup ----------------------------------------------
+      case "get_channel_info": {
+        const data = await slackPost("conversations.info", { channel: msg.channelId });
+        return { channel: data.channel };
+      }
+
+      case "leave_channel": {
+        await slackPost("conversations.leave", { channel: msg.channelId });
+        // Also remove from watched channels if present
+        const stored = await messenger.storage.local.get(["watchedChannels"]);
+        const updated = (stored.watchedChannels || []).filter((c) => c.id !== msg.channelId);
+        await messenger.storage.local.set({ watchedChannels: updated });
+        return { success: true };
+      }
+
       // ---- Auth --------------------------------------------------------
       case "get_token":
         return { token: state.token ? "SET" : null };

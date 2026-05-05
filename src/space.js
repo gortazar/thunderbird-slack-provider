@@ -12,14 +12,17 @@
 let currentChannel = null;
 const userCache = {};
 let disableAvatars = false;
+let rateLimitedMode = false;
+let workspaceName = "Slack";
 
 // ---------------------------------------------------------------------------
 // Startup
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", async () => {
   // Load display preferences
-  const stored = await messenger.storage.local.get(["disableAvatars"]);
+  const stored = await messenger.storage.local.get(["disableAvatars", "rateLimitedMode"]);
   disableAvatars = !!stored.disableAvatars;
+  rateLimitedMode = !!stored.rateLimitedMode;
 
   const res = await bg({ type: "get_token" });
   if (res.token) {
@@ -46,6 +49,23 @@ document.addEventListener("DOMContentLoaded", async () => {
       sendChannelMessage();
     }
   });
+
+  // Wire Add Channel dialog buttons
+  document.getElementById("btn-add-channel-cancel").addEventListener("click", hideAddChannelDialog);
+  document.getElementById("btn-add-channel-confirm").addEventListener("click", addChannel);
+  document.getElementById("add-channel-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addChannel();
+    }
+    if (e.key === "Escape") {
+      hideAddChannelDialog();
+    }
+  });
+
+  // Dismiss context menu when clicking elsewhere
+  document.addEventListener("click", hideContextMenu);
+  document.addEventListener("contextmenu", hideContextMenu);
 });
 
 // Listen for unread updates pushed from the background script
@@ -55,18 +75,20 @@ messenger.runtime.onMessage.addListener((msg) => {
   }
 });
 
-// Keep disableAvatars in sync if the user changes it in the options page
+// Keep preferences in sync when changed via the options page
 messenger.storage.onChanged.addListener((changes) => {
   if ("disableAvatars" in changes) {
     const change = changes.disableAvatars;
-    // newValue is absent when the key is removed — treat that as false (default)
     const newVal = "newValue" in change ? !!change.newValue : false;
-    if (newVal === disableAvatars) return; // no effective change
+    if (newVal === disableAvatars) return;
     disableAvatars = newVal;
-    // Re-render the current channel so the change is visible immediately
     if (currentChannel) {
       loadMessages(currentChannel.id);
     }
+  }
+  if ("rateLimitedMode" in changes) {
+    const change = changes.rateLimitedMode;
+    rateLimitedMode = "newValue" in change ? !!change.newValue : false;
   }
 });
 
@@ -90,18 +112,37 @@ async function loadChannels() {
   const listEl = document.getElementById("channel-list");
   listEl.innerHTML = '<div class="status-msg">Loading channels…</div>';
 
-  const [chanRes, unreadRes] = await Promise.all([
-    bg({ type: "get_channels" }),
-    bg({ type: "get_unread" }),
-  ]);
-
-  if (chanRes.error) {
-    listEl.innerHTML = `<div class="error-msg">Error: ${escHtml(chanRes.error)}</div>`;
-    return;
+  // Fetch workspace name (best-effort; keep previous name on failure)
+  const wsRes = await bg({ type: "get_workspace_name" });
+  if (wsRes.name) {
+    workspaceName = wsRes.name;
   }
 
-  const channels = (chanRes.channels || []).filter((c) => c.is_member);
-  const unread = new Set(unreadRes.unreadChannels || []);
+  let channels;
+  let unread;
+
+  if (rateLimitedMode) {
+    // In rate-limited mode show only the channels the user has explicitly added
+    const [watchedRes, unreadRes] = await Promise.all([
+      bg({ type: "get_watched_channels" }),
+      bg({ type: "get_unread" }),
+    ]);
+    channels = watchedRes.channels || [];
+    unread = new Set(unreadRes.unreadChannels || []);
+  } else {
+    const [chanRes, unreadRes] = await Promise.all([
+      bg({ type: "get_channels" }),
+      bg({ type: "get_unread" }),
+    ]);
+
+    if (chanRes.error) {
+      listEl.innerHTML = `<div class="error-msg">Error: ${escHtml(chanRes.error)}</div>`;
+      return;
+    }
+
+    channels = (chanRes.channels || []).filter((c) => c.is_member);
+    unread = new Set(unreadRes.unreadChannels || []);
+  }
 
   renderChannelList(channels, unread);
 }
@@ -110,8 +151,40 @@ function renderChannelList(channels, unreadSet) {
   const listEl = document.getElementById("channel-list");
   listEl.innerHTML = "";
 
+  // ── Workspace section header ──────────────────────────────────────────
+  const wsHeader = document.createElement("div");
+  wsHeader.className = "workspace-header";
+  wsHeader.innerHTML = `
+    <span class="workspace-name">${escHtml(workspaceName)}</span>
+    <button class="icon-btn workspace-menu-btn" title="Workspace options" aria-haspopup="true">⋮</button>
+  `;
+  listEl.appendChild(wsHeader);
+
+  // Right-click on workspace name → context menu
+  wsHeader.querySelector(".workspace-name").addEventListener("contextmenu", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    showWorkspaceContextMenu(e.clientX, e.clientY);
+  });
+
+  // Click the ⋮ button → context menu
+  wsHeader.querySelector(".workspace-menu-btn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    showWorkspaceContextMenu(e.clientX, e.clientY);
+  });
+
+  // ── Channel items ─────────────────────────────────────────────────────
+  const group = document.createElement("div");
+  group.className = "channels-group";
+  listEl.appendChild(group);
+
   if (channels.length === 0) {
-    listEl.innerHTML = '<div class="status-msg">No channels found.</div>';
+    const empty = document.createElement("div");
+    empty.className = "status-msg";
+    empty.textContent = rateLimitedMode
+      ? "No channels added yet. Click ⋮ next to the workspace name to add a channel."
+      : "No channels found.";
+    group.appendChild(empty);
     return;
   }
 
@@ -136,7 +209,15 @@ function renderChannelList(channels, unreadSet) {
     item.textContent = `${prefix} ${ch.name}`;
 
     item.addEventListener("click", () => selectChannel(ch));
-    listEl.appendChild(item);
+
+    // Right-click on channel → context menu
+    item.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showChannelContextMenu(ch, e.clientX, e.clientY);
+    });
+
+    group.appendChild(item);
   }
 }
 
@@ -149,6 +230,157 @@ function refreshUnreadBadges(unreadSet) {
       el.classList.remove("unread");
     }
   });
+}
+
+// ---------------------------------------------------------------------------
+// Context menus
+// ---------------------------------------------------------------------------
+
+/** Show a generic context menu at (x, y) with the provided item list. */
+function showContextMenu(items, x, y) {
+  const menu = document.getElementById("context-menu");
+  const ul = document.getElementById("context-menu-items");
+
+  ul.innerHTML = "";
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.className = "context-menu-item" + (item.danger ? " danger" : "");
+    li.setAttribute("role", "menuitem");
+    li.textContent = item.label;
+    li.addEventListener("click", (e) => {
+      e.stopPropagation();
+      hideContextMenu();
+      item.action();
+    });
+    ul.appendChild(li);
+  }
+
+  // Position the menu; adjust if it overflows the viewport
+  menu.style.left = `${x}px`;
+  menu.style.top = `${y}px`;
+  menu.classList.remove("hidden");
+
+  window.requestAnimationFrame(() => {
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+      menu.style.left = `${x - rect.width}px`;
+    }
+    if (rect.bottom > window.innerHeight) {
+      menu.style.top = `${y - rect.height}px`;
+    }
+  });
+}
+
+function hideContextMenu() {
+  document.getElementById("context-menu").classList.add("hidden");
+}
+
+/** Context menu for the workspace name header. */
+function showWorkspaceContextMenu(x, y) {
+  showContextMenu(
+    [{ label: "Add Channel…", action: () => showAddChannelDialog() }],
+    x,
+    y
+  );
+}
+
+/** Context menu for an individual channel item. */
+function showChannelContextMenu(channel, x, y) {
+  showContextMenu(
+    [
+      {
+        label: "Remove Channel",
+        action: async () => {
+          await bg({ type: "remove_watched_channel", channelId: channel.id });
+          if (currentChannel && currentChannel.id === channel.id) {
+            currentChannel = null;
+            document.getElementById("messages-list").innerHTML = "";
+            document.getElementById("channel-label").textContent = "";
+          }
+          await loadChannels();
+        },
+      },
+      {
+        label: "Unsubscribe",
+        danger: true,
+        action: async () => {
+          if (!window.confirm(`Leave #${channel.name}? This will remove you from the channel in Slack.`)) return;
+          const res = await bg({ type: "leave_channel", channelId: channel.id });
+          if (res.error) {
+            alert(`Failed to leave channel: ${res.error}`);
+            return;
+          }
+          if (currentChannel && currentChannel.id === channel.id) {
+            currentChannel = null;
+            document.getElementById("messages-list").innerHTML = "";
+            document.getElementById("channel-label").textContent = "";
+          }
+          await loadChannels();
+        },
+      },
+    ],
+    x,
+    y
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Add Channel dialog
+// ---------------------------------------------------------------------------
+function showAddChannelDialog() {
+  const dialog = document.getElementById("add-channel-dialog");
+  document.getElementById("add-channel-input").value = "";
+  document.getElementById("add-channel-error").classList.add("hidden");
+  dialog.classList.remove("hidden");
+  document.getElementById("add-channel-input").focus();
+}
+
+function hideAddChannelDialog() {
+  document.getElementById("add-channel-dialog").classList.add("hidden");
+}
+
+async function addChannel() {
+  const input = document.getElementById("add-channel-input").value.trim();
+  if (!input) return;
+
+  const errorEl = document.getElementById("add-channel-error");
+  const confirmBtn = document.getElementById("btn-add-channel-confirm");
+
+  confirmBtn.disabled = true;
+  confirmBtn.textContent = "Adding…";
+  errorEl.classList.add("hidden");
+
+  try {
+    const res = await bg({ type: "get_channel_info", channelId: input });
+    if (res.error) {
+      errorEl.textContent = `Channel not found: ${escHtml(res.error)}`;
+      errorEl.classList.remove("hidden");
+      return;
+    }
+
+    const ch = res.channel;
+    await bg({
+      type: "add_watched_channel",
+      channel: {
+        id: ch.id,
+        name: ch.name,
+        is_private: !!ch.is_private,
+        is_member: !!ch.is_member,
+      },
+    });
+
+    hideAddChannelDialog();
+    await loadChannels();
+
+    // Auto-select the newly added channel
+    selectChannel(ch);
+  } catch (e) {
+    errorEl.textContent = `Error: ${escHtml(e.message)}`;
+    errorEl.classList.remove("hidden");
+  } finally {
+    confirmBtn.disabled = false;
+    confirmBtn.textContent = "Add Channel";
+  }
 }
 
 // ---------------------------------------------------------------------------
