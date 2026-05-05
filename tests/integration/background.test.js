@@ -628,7 +628,7 @@ describe("chat message sent", () => {
     await setToken("xoxb-tok");
 
     let convIdCounter = 0;
-    mockMessenger.chat.createConversation.mockImplementation((_accountId, name) => {
+    mockMessenger.chat.createConversation.mockImplementation(() => {
       convIdCounter++;
       return Promise.resolve({ id: `conv-${convIdCounter}` });
     });
@@ -649,6 +649,25 @@ describe("chat message sent", () => {
     expect(body.channel).toBe("C002");
     expect(body.text).toBe("hello random");
   });
+
+  test("uses per-account token (not global) when sending a message", async () => {
+    // No global token – only the account-level token should be used.
+    const channels = [{ id: "C001", name: "general", is_member: true }];
+    mockSlackApi({ "conversations.list": { ok: true, channels, response_metadata: {} } });
+
+    await chatAccountConnectedHandler({ id: "acc-2", options: { token: "xoxb-account-only" } });
+
+    mockSlackApi({ "chat.postMessage": { ok: true, message: {} } });
+    await chatMessageSentHandler("conv-1", "hello from account token");
+
+    const postCall = global.fetch.mock.calls.find(([url]) => url.includes("chat.postMessage"));
+    expect(postCall).toBeDefined();
+    const body = JSON.parse(postCall[1].body);
+    expect(body.channel).toBe("C001");
+    // Verify the per-account token was used, not any global token.
+    expect(postCall[1].headers.Authorization).toBe("Bearer xoxb-account-only");
+  });
+
 
   test("does nothing when no matching conversation is found", async () => {
     await setToken("xoxb-tok");
