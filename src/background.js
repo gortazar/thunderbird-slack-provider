@@ -18,6 +18,7 @@ let state = {
   slackSpaceId: null,
   unreadChannels: new Set(),
   pollingAlarmName: "slack-poll",
+  rateLimitedMode: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -32,13 +33,21 @@ messenger.runtime.onStartup.addListener(async () => {
 });
 
 async function init() {
-  const stored = await messenger.storage.local.get(["slackToken"]);
+  const stored = await messenger.storage.local.get(["slackToken", "rateLimitedMode"]);
   if (stored.slackToken) {
     state.token = stored.slackToken;
     schedulePolling();
   }
+  state.rateLimitedMode = !!stored.rateLimitedMode;
   await ensureSlackSpace();
 }
+
+// Keep rateLimitedMode in sync when the user changes it in the options page.
+messenger.storage.onChanged.addListener((changes) => {
+  if (changes.rateLimitedMode !== undefined) {
+    state.rateLimitedMode = !!changes.rateLimitedMode.newValue;
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Spaces API – add Slack to Thunderbird's spaces toolbar
@@ -91,13 +100,9 @@ messenger.alarms.onAlarm.addListener(async (alarm) => {
 async function pollUnread() {
   if (!state.token) return;
   try {
-    const data = await slackPost("conversations.list", {
-      types: "public_channel,private_channel",
-      limit: 200,
-      exclude_archived: true,
-    });
+    const channels = await fetchAllChannels();
     const unread = new Set();
-    for (const ch of data.channels || []) {
+    for (const ch of channels) {
       if (ch.is_member && ch.unread_count > 0) unread.add(ch.id);
     }
     state.unreadChannels = unread;
@@ -115,6 +120,12 @@ async function pollUnread() {
 // ---------------------------------------------------------------------------
 // Slack API helpers
 // ---------------------------------------------------------------------------
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+const RATE_LIMIT_DELAY_MS = 1000;
+
 async function slackPost(method, params = {}) {
   if (!state.token) throw new Error("No Slack token configured.");
   const resp = await fetch(`${SLACK_API}/${method}`, {
@@ -130,14 +141,21 @@ async function slackPost(method, params = {}) {
   return json;
 }
 
-// Paginate through all channels
+// Paginate through all channels.
+// In rate-limited mode each page uses a smaller batch size and a short delay
+// is inserted between successive requests to stay within Slack's Tier-2 limit.
 async function fetchAllChannels() {
   const channels = [];
   let cursor = undefined;
+  let isFirstRequest = true;
   do {
+    if (!isFirstRequest && state.rateLimitedMode) {
+      await sleep(RATE_LIMIT_DELAY_MS);
+    }
+    isFirstRequest = false;
     const params = {
       types: "public_channel,private_channel",
-      limit: 200,
+      limit: state.rateLimitedMode ? 20 : 200,
       exclude_archived: true,
     };
     if (cursor) params.cursor = cursor;

@@ -16,11 +16,13 @@ const BACKGROUND = path.resolve(__dirname, "../../src/background.js");
 // Captured listener references
 let messageHandler;
 let alarmHandler;
+let storageChangedHandler;
 let mockMessenger;
 
 function createMockMessenger() {
   messageHandler = null;
   alarmHandler = null;
+  storageChangedHandler = null;
 
   return {
     runtime: {
@@ -39,7 +41,11 @@ function createMockMessenger() {
         set: jest.fn().mockResolvedValue({}),
         remove: jest.fn().mockResolvedValue({}),
       },
-      onChanged: { addListener: jest.fn() },
+      onChanged: {
+        addListener: jest.fn((fn) => {
+          storageChangedHandler = fn;
+        }),
+      },
     },
     alarms: {
       create: jest.fn(),
@@ -395,5 +401,111 @@ describe("polling alarm", () => {
     global.fetch = jest.fn();
     await alarmHandler({ name: "some-other-alarm" });
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Rate-limited mode
+// ---------------------------------------------------------------------------
+describe("rate-limited mode", () => {
+  test("uses batch size of 200 when rate-limited mode is off", async () => {
+    await setToken("xoxb-tok");
+    mockSlackApi({ "conversations.list": { ok: true, channels: [], response_metadata: {} } });
+
+    await messageHandler({ type: "get_channels" });
+
+    const [, options] = global.fetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body.limit).toBe(200);
+  });
+
+  test("uses batch size of 20 when rate-limited mode is enabled", async () => {
+    await setToken("xoxb-tok");
+    storageChangedHandler({ rateLimitedMode: { newValue: true } });
+    mockSlackApi({ "conversations.list": { ok: true, channels: [], response_metadata: {} } });
+
+    await messageHandler({ type: "get_channels" });
+
+    const [, options] = global.fetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body.limit).toBe(20);
+  });
+
+  test("disabling rate-limited mode via storage.onChanged restores batch size of 200", async () => {
+    await setToken("xoxb-tok");
+    storageChangedHandler({ rateLimitedMode: { newValue: true } });
+    storageChangedHandler({ rateLimitedMode: { newValue: false } });
+    mockSlackApi({ "conversations.list": { ok: true, channels: [], response_metadata: {} } });
+
+    await messageHandler({ type: "get_channels" });
+
+    const [, options] = global.fetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body.limit).toBe(200);
+  });
+
+  test("applies delay between paginated requests when rate-limited mode is on", async () => {
+    jest.useFakeTimers();
+    try {
+      await setToken("xoxb-tok");
+      storageChangedHandler({ rateLimitedMode: { newValue: true } });
+
+      let callCount = 0;
+      global.fetch = jest.fn().mockImplementation(() => {
+        callCount++;
+        const cursor = callCount === 1 ? "cursor-abc" : "";
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              ok: true,
+              channels: [{ id: `C00${callCount}`, name: `ch${callCount}` }],
+              response_metadata: { next_cursor: cursor },
+            }),
+        });
+      });
+
+      const setTimeoutSpy = jest.spyOn(global, "setTimeout");
+      const promise = messageHandler({ type: "get_channels" });
+      await jest.runAllTimersAsync();
+      const result = await promise;
+
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 1000);
+      expect(result.channels).toHaveLength(2);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("does not apply delay on the first page even in rate-limited mode", async () => {
+    jest.useFakeTimers();
+    try {
+      await setToken("xoxb-tok");
+      storageChangedHandler({ rateLimitedMode: { newValue: true } });
+      mockSlackApi({ "conversations.list": { ok: true, channels: [], response_metadata: {} } });
+
+      const setTimeoutSpy = jest.spyOn(global, "setTimeout");
+      const promise = messageHandler({ type: "get_channels" });
+      await jest.runAllTimersAsync();
+      await promise;
+
+      // No delay for the first (and only) page
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  test("polling also uses rate-limited settings when mode is enabled", async () => {
+    await setToken("xoxb-tok");
+    storageChangedHandler({ rateLimitedMode: { newValue: true } });
+
+    const channels = [{ id: "C001", is_member: true, unread_count: 1 }];
+    mockSlackApi({ "conversations.list": { ok: true, channels, response_metadata: {} } });
+
+    await alarmHandler({ name: "slack-poll" });
+
+    const [, options] = global.fetch.mock.calls[0];
+    const body = JSON.parse(options.body);
+    expect(body.limit).toBe(20);
   });
 });

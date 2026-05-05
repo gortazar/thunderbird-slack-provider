@@ -65,6 +65,22 @@
     </section>
 
     <section class="card">
+      <h2>Rate Limiting</h2>
+
+      <div class="form-group-check">
+        <label class="check-label">
+          <input type="checkbox" id="rate-limited-mode" />
+          Enable rate-limited mode — fetch channels with delays
+        </label>
+        <p class="help-text">
+          When enabled, channel lists are fetched in smaller batches with a
+          one-second pause between each request. Use this if you see
+          <code>ratelimited</code> errors from the Slack API.
+        </p>
+      </div>
+    </section>
+
+    <section class="card">
       <h2>Required Scopes</h2>
       <p class="help-text">
         Your Slack app / token must have the following OAuth scopes granted:

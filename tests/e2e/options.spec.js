@@ -164,6 +164,41 @@ test.describe("options.html", () => {
     await page.click("#btn-clear");
     await expect(page.locator("#slack-token")).toHaveValue("");
   });
+
+  test("renders Rate Limiting section with rate-limited-mode checkbox", async ({ page }) => {
+    await goToOptions(page);
+    const section = page.locator("section").filter({ hasText: "Rate Limiting" });
+    await expect(section).toBeVisible();
+    await expect(section.locator("#rate-limited-mode")).toBeVisible();
+  });
+
+  test("rate-limited-mode checkbox is unchecked by default", async ({ page }) => {
+    await goToOptions(page);
+    await expect(page.locator("#rate-limited-mode")).not.toBeChecked();
+  });
+
+  test("rate-limited-mode checkbox is checked when storage has rateLimitedMode:true", async ({
+    page,
+  }) => {
+    await goToOptions(page, { storageData: { rateLimitedMode: true } });
+    await expect(page.locator("#rate-limited-mode")).toBeChecked();
+  });
+
+  test("checking rate-limited-mode saves to storage", async ({ page }) => {
+    await goToOptions(page);
+    await page.locator("#rate-limited-mode").check();
+    await page.waitForTimeout(200);
+    const saved = await page.evaluate(() => window.__storageData.rateLimitedMode);
+    expect(saved).toBe(true);
+  });
+
+  test("unchecking rate-limited-mode saves false to storage", async ({ page }) => {
+    await goToOptions(page, { storageData: { rateLimitedMode: true } });
+    await page.locator("#rate-limited-mode").uncheck();
+    await page.waitForTimeout(200);
+    const saved = await page.evaluate(() => window.__storageData.rateLimitedMode);
+    expect(saved).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
