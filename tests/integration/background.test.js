@@ -668,7 +668,6 @@ describe("chat message sent", () => {
     expect(postCall[1].headers.Authorization).toBe("Bearer xoxb-account-only");
   });
 
-
   test("does nothing when no matching conversation is found", async () => {
     await setToken("xoxb-tok");
     global.fetch = jest.fn();
