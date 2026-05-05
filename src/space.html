@@ -24,9 +24,9 @@
     <nav id="channel-sidebar">
       <header id="sidebar-header">
         <img src="icons/slack-16.svg" alt="" class="sidebar-logo" />
-        <span id="workspace-name">Slack</span>
         <button id="btn-refresh-channels" class="icon-btn" title="Refresh channels">↻</button>
       </header>
+      <!-- Workspace name + channels are rendered here by space.js -->
       <div id="channel-list" role="listbox" aria-label="Channels"></div>
     </nav>
 
@@ -50,6 +50,32 @@
         <button id="btn-send" class="btn btn-primary" aria-label="Send message">Send</button>
       </footer>
     </main>
+  </div>
+
+  <!-- ── Context menu ───────────────────────────────────────────────── -->
+  <div id="context-menu" class="context-menu hidden" role="menu" aria-label="Options">
+    <ul id="context-menu-items"></ul>
+  </div>
+
+  <!-- ── Add channel dialog ─────────────────────────────────────────── -->
+  <div id="add-channel-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="add-channel-title">
+    <div class="dialog">
+      <h3 id="add-channel-title">Add Channel</h3>
+      <p class="dialog-help">Enter the Slack channel ID (e.g. <code>C01234ABCDE</code>) found in the channel URL, or type the channel name.</p>
+      <input
+        type="text"
+        id="add-channel-input"
+        class="dialog-input"
+        placeholder="C01234ABCDE or channel-name"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div id="add-channel-error" class="error-msg hidden"></div>
+      <div class="dialog-actions">
+        <button id="btn-add-channel-cancel" class="btn btn-secondary">Cancel</button>
+        <button id="btn-add-channel-confirm" class="btn btn-primary">Add Channel</button>
+      </div>
+    </div>
   </div>
 
   <script src="space.js"></script>
