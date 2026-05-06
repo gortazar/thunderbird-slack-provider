@@ -440,6 +440,12 @@ html, body {
 }
 
 .context-menu-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  text-align: left;
+  font-family: inherit;
   padding: 7px 14px;
   cursor: pointer;
   color: var(--color-text);
@@ -447,12 +453,15 @@ html, body {
   white-space: nowrap;
 }
 
-.context-menu-item:hover {
+.context-menu-item:hover,
+.context-menu-item:focus {
   background: var(--color-active);
   color: var(--color-active-fg);
+  outline: none;
 }
 
-.context-menu-item.danger:hover {
+.context-menu-item.danger:hover,
+.context-menu-item.danger:focus {
   background: var(--color-mention);
   color: #fff;
 }

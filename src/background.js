@@ -13,6 +13,15 @@ const SLACK_API = "https://slack.com/api";
 // ---------------------------------------------------------------------------
 // In-memory state
 // ---------------------------------------------------------------------------
+
+// Serialise all watchedChannels storage mutations so concurrent messages from
+// multiple space tabs cannot lose each other's writes.
+let _watchedMutex = Promise.resolve();
+function _withWatched(fn) {
+  _watchedMutex = _watchedMutex.then(fn);
+  return _watchedMutex;
+}
+
 let state = {
   token: null,
   slackSpaceId: null,
@@ -332,20 +341,25 @@ messenger.runtime.onMessage.addListener(async (msg) => {
       }
 
       case "add_watched_channel": {
-        const stored = await messenger.storage.local.get(["watchedChannels"]);
-        const existing = stored.watchedChannels || [];
-        if (!existing.find((c) => c.id === msg.channel.id)) {
-          existing.push(msg.channel);
-          await messenger.storage.local.set({ watchedChannels: existing });
-        }
-        return { success: true, channels: existing };
+        return await _withWatched(async () => {
+          const stored = await messenger.storage.local.get(["watchedChannels"]);
+          const existing = stored.watchedChannels || [];
+          if (!existing.find((c) => c.id === msg.channel.id)) {
+            const updated = [...existing, msg.channel];
+            await messenger.storage.local.set({ watchedChannels: updated });
+            return { success: true, channels: updated };
+          }
+          return { success: true, channels: existing };
+        });
       }
 
       case "remove_watched_channel": {
-        const stored = await messenger.storage.local.get(["watchedChannels"]);
-        const updated = (stored.watchedChannels || []).filter((c) => c.id !== msg.channelId);
-        await messenger.storage.local.set({ watchedChannels: updated });
-        return { success: true, channels: updated };
+        return await _withWatched(async () => {
+          const stored = await messenger.storage.local.get(["watchedChannels"]);
+          const updated = (stored.watchedChannels || []).filter((c) => c.id !== msg.channelId);
+          await messenger.storage.local.set({ watchedChannels: updated });
+          return { success: true, channels: updated };
+        });
       }
 
       // ---- Channel lookup ----------------------------------------------
@@ -356,11 +370,12 @@ messenger.runtime.onMessage.addListener(async (msg) => {
 
       case "leave_channel": {
         await slackPost("conversations.leave", { channel: msg.channelId });
-        // Also remove from watched channels if present
-        const stored = await messenger.storage.local.get(["watchedChannels"]);
-        const updated = (stored.watchedChannels || []).filter((c) => c.id !== msg.channelId);
-        await messenger.storage.local.set({ watchedChannels: updated });
-        return { success: true };
+        return await _withWatched(async () => {
+          const stored = await messenger.storage.local.get(["watchedChannels"]);
+          const updated = (stored.watchedChannels || []).filter((c) => c.id !== msg.channelId);
+          await messenger.storage.local.set({ watchedChannels: updated });
+          return { success: true };
+        });
       }
 
       // ---- Auth --------------------------------------------------------
