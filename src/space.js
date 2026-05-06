@@ -275,10 +275,10 @@ function showContextMenu(items, x, y) {
       const idx = btns.indexOf(document.activeElement);
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        btns[(idx + 1) % btns.length]?.focus();
+        btns[(idx + 1) % btns.length].focus();
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        btns[(idx - 1 + btns.length) % btns.length]?.focus();
+        btns[(idx - 1 + btns.length) % btns.length].focus();
       } else if (e.key === "Escape") {
         hideContextMenu();
       }
