@@ -14,7 +14,7 @@ const SLACK_API = "https://slack.com/api";
 // In-memory state
 // ---------------------------------------------------------------------------
 
-// Serialise all watchedChannels storage mutations so concurrent messages from
+// Serialize all watchedChannels storage mutations so concurrent messages from
 // multiple space tabs cannot lose each other's writes.
 let _watchedMutex = Promise.resolve();
 function _withWatched(fn) {

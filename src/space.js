@@ -94,7 +94,6 @@ messenger.storage.onChanged.addListener((changes) => {
     const newMode = "newValue" in change ? !!change.newValue : false;
     if (newMode !== rateLimitedMode) {
       rateLimitedMode = newMode;
-      currentChannel = null;
       loadChannels();
     }
   }
