@@ -91,7 +91,12 @@ messenger.storage.onChanged.addListener((changes) => {
   }
   if ("rateLimitedMode" in changes) {
     const change = changes.rateLimitedMode;
-    rateLimitedMode = "newValue" in change ? !!change.newValue : false;
+    const newMode = "newValue" in change ? !!change.newValue : false;
+    if (newMode !== rateLimitedMode) {
+      rateLimitedMode = newMode;
+      currentChannel = null;
+      loadChannels();
+    }
   }
 });
 
@@ -173,7 +178,14 @@ function renderChannelList(channels, unreadSet) {
   // Click the ⋮ button → context menu
   wsHeader.querySelector(".workspace-menu-btn").addEventListener("click", (e) => {
     e.stopPropagation();
-    showWorkspaceContextMenu(e.clientX, e.clientY);
+    let x = e.clientX;
+    let y = e.clientY;
+    if (!x && !y) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      x = rect.right;
+      y = rect.bottom;
+    }
+    showWorkspaceContextMenu(x, y);
   });
 
   // ── Channel items ─────────────────────────────────────────────────────
@@ -247,14 +259,31 @@ function showContextMenu(items, x, y) {
   ul.innerHTML = "";
   for (const item of items) {
     const li = document.createElement("li");
-    li.className = "context-menu-item" + (item.danger ? " danger" : "");
-    li.setAttribute("role", "menuitem");
-    li.textContent = item.label;
-    li.addEventListener("click", (e) => {
+    li.setAttribute("role", "presentation");
+    const btn = document.createElement("button");
+    btn.className = "context-menu-item" + (item.danger ? " danger" : "");
+    btn.setAttribute("role", "menuitem");
+    btn.setAttribute("tabindex", "-1");
+    btn.textContent = item.label;
+    btn.addEventListener("click", (e) => {
       e.stopPropagation();
       hideContextMenu();
       item.action();
     });
+    btn.addEventListener("keydown", (e) => {
+      const btns = [...ul.querySelectorAll("[role='menuitem']")];
+      const idx = btns.indexOf(document.activeElement);
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        btns[(idx + 1) % btns.length]?.focus();
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        btns[(idx - 1 + btns.length) % btns.length]?.focus();
+      } else if (e.key === "Escape") {
+        hideContextMenu();
+      }
+    });
+    li.appendChild(btn);
     ul.appendChild(li);
   }
 
@@ -265,12 +294,18 @@ function showContextMenu(items, x, y) {
 
   window.requestAnimationFrame(() => {
     const rect = menu.getBoundingClientRect();
+    let left = x;
+    let top = y;
     if (rect.right > window.innerWidth) {
-      menu.style.left = `${x - rect.width}px`;
+      left = x - rect.width;
     }
     if (rect.bottom > window.innerHeight) {
-      menu.style.top = `${y - rect.height}px`;
+      top = y - rect.height;
     }
+    menu.style.left = `${Math.max(0, left)}px`;
+    menu.style.top = `${Math.max(0, top)}px`;
+    // Focus the first item for keyboard users
+    ul.querySelector("[role='menuitem']")?.focus();
   });
 }
 
@@ -330,16 +365,25 @@ function showChannelContextMenu(channel, x, y) {
 // ---------------------------------------------------------------------------
 // Add Channel dialog
 // ---------------------------------------------------------------------------
+
+function _onDialogKeydown(e) {
+  if (e.key === "Escape") {
+    hideAddChannelDialog();
+  }
+}
+
 function showAddChannelDialog() {
   const dialog = document.getElementById("add-channel-dialog");
   document.getElementById("add-channel-input").value = "";
   document.getElementById("add-channel-error").classList.add("hidden");
   dialog.classList.remove("hidden");
   document.getElementById("add-channel-input").focus();
+  document.addEventListener("keydown", _onDialogKeydown);
 }
 
 function hideAddChannelDialog() {
   document.getElementById("add-channel-dialog").classList.add("hidden");
+  document.removeEventListener("keydown", _onDialogKeydown);
 }
 
 async function addChannel() {
@@ -356,7 +400,7 @@ async function addChannel() {
   try {
     const res = await bg({ type: "get_channel_info", channelId: input });
     if (res.error) {
-      errorEl.textContent = `Channel not found: ${escHtml(res.error)}`;
+      errorEl.textContent = `Channel not found: ${res.error}`;
       errorEl.classList.remove("hidden");
       return;
     }
@@ -378,7 +422,7 @@ async function addChannel() {
     // Auto-select the newly added channel
     selectChannel(ch);
   } catch (e) {
-    errorEl.textContent = `Error: ${escHtml(e.message)}`;
+    errorEl.textContent = `Error: ${e.message}`;
     errorEl.classList.remove("hidden");
   } finally {
     confirmBtn.disabled = false;
