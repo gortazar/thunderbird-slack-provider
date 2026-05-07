@@ -24,7 +24,7 @@
     {
       "name": "Slack",
       "description": "Connect Thunderbird Chat to your Slack workspace.",
-      "iconUrl": "icons/slack-96.svg",
+      "iconURL": "icons/slack-96.svg",
       "hasPassword": false,
       "options": [
         {
