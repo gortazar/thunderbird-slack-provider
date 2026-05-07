@@ -98,8 +98,9 @@ async function ensureSlackSpace() {
 
 /**
  * Registers event listeners for the Thunderbird chat protocol.
- * These listeners drive the account lifecycle (when available): connecting,
- * disconnecting, and forwarding outgoing messages to the Slack API.
+ * The protocol itself is declared in manifest.json under "chat_protocols".
+ * These listeners drive the account lifecycle: connecting, disconnecting, and
+ * forwarding outgoing messages to the Slack API.
  */
 function registerChatProtocol() {
   if (!messenger.chat) {
