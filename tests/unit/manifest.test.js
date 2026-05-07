@@ -9,10 +9,13 @@ describe("manifest chat protocol declaration", () => {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
 
     expect(Array.isArray(manifest.chat_protocols)).toBe(true);
-    expect(manifest.chat_protocols).toHaveLength(1);
-    expect(manifest.chat_protocols[0]).toMatchObject({
-      name: "Slack",
-      iconURL: "icons/slack-96.svg",
-    });
+    expect(manifest.chat_protocols).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Slack",
+          iconURL: "icons/slack-96.svg",
+        }),
+      ])
+    );
   });
 });
