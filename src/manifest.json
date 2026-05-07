@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Thunderbird Slack Provider",
-  "version": "1.2.1",
+  "version": "1.2.2",
   "description": "Read and send Slack channel messages directly from Thunderbird.",
   "author": "thunderbird-slack-provider contributors",
   "icons": {
@@ -15,26 +15,9 @@
   "permissions": [
     "storage",
     "alarms",
-    "chat",
     "https://slack.com/api/*",
     "https://files.slack.com/*",
     "https://avatars.slack-edge.com/*"
-  ],
-  "chat_protocols": [
-    {
-      "name": "Slack",
-      "description": "Connect Thunderbird Chat to your Slack workspace.",
-      "iconURL": "icons/slack-96.svg",
-      "hasPassword": false,
-      "options": [
-        {
-          "name": "token",
-          "label": "API Token",
-          "type": "string",
-          "default": ""
-        }
-      ]
-    }
   ],
   "options_ui": {
     "page": "options.html",
