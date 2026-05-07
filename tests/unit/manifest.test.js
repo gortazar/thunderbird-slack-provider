@@ -1,0 +1,18 @@
+"use strict";
+
+const fs = require("fs");
+const path = require("path");
+
+describe("manifest chat protocol declaration", () => {
+  test("declares Slack chat protocol with iconURL so it appears in New Chat", () => {
+    const manifestPath = path.resolve(__dirname, "../../src/manifest.json");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+
+    expect(Array.isArray(manifest.chat_protocols)).toBe(true);
+    expect(manifest.chat_protocols).toHaveLength(1);
+    expect(manifest.chat_protocols[0]).toMatchObject({
+      name: "Slack",
+      iconURL: "icons/slack-96.svg",
+    });
+  });
+});
