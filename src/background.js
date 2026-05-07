@@ -98,14 +98,13 @@ async function ensureSlackSpace() {
 
 /**
  * Registers event listeners for the Thunderbird chat protocol.
- * The protocol itself is declared in manifest.json under "chat_protocols".
- * These listeners drive the account lifecycle: connecting, disconnecting, and
- * forwarding outgoing messages to the Slack API.
+ * These listeners drive the account lifecycle (when available): connecting,
+ * disconnecting, and forwarding outgoing messages to the Slack API.
  */
 function registerChatProtocol() {
   if (!messenger.chat) {
-    // messenger.chat is available in Thunderbird 128+ when the "chat" permission
-    // is granted.  Gracefully degrade on older builds.
+    // messenger.chat may be unavailable depending on Thunderbird build/API
+    // support. Gracefully degrade when the API is absent.
     console.warn("messenger.chat is not available in this version of Thunderbird.");
     return;
   }
