@@ -19,6 +19,22 @@
     "https://files.slack.com/*",
     "https://avatars.slack-edge.com/*"
   ],
+  "chat_protocols": [
+    {
+      "name": "Slack",
+      "description": "Connect Thunderbird Chat to your Slack workspace.",
+      "iconURL": "icons/slack-96.svg",
+      "hasPassword": false,
+      "options": [
+        {
+          "name": "token",
+          "label": "API Token",
+          "type": "string",
+          "default": ""
+        }
+      ]
+    }
+  ],
   "options_ui": {
     "page": "options.html",
     "open_in_tab": false
