@@ -420,6 +420,7 @@ test.describe("space.html – v1.2.0 visual appearance", () => {
             { id: "C001", name: "general", is_member: true, is_private: false },
           ],
         },
+        get_watched_channels: { channels: [{ id: "C001", name: "general", is_member: true, is_private: false }] },
         get_unread: { unreadChannels: [] },
       },
     });
@@ -428,7 +429,35 @@ test.describe("space.html – v1.2.0 visual appearance", () => {
     await page.locator(".workspace-menu-btn").click();
     await page.locator(".context-menu-item").filter({ hasText: "Add Channel" }).click();
     await expect(page.locator("#add-channel-dialog")).not.toHaveClass(/hidden/);
+    await expect(page.locator("#add-channel-select")).toBeVisible();
+    await expect(page.locator("#add-channel-select")).toContainText("No channels available");
     await page.screenshot({ path: testInfo.outputPath("add-channel-dialog.png") });
+  });
+
+  test("Add Channel dialog lists addable channels", async ({ page }, testInfo) => {
+    await goToSpace(page, {
+      storageData: { rateLimitedMode: true },
+      responses: {
+        get_token: { token: "SET" },
+        get_workspace_name: { name: "Acme Corp" },
+        get_watched_channels: { channels: [{ id: "C001", name: "general", is_member: true, is_private: false }] },
+        get_channels: {
+          channels: [
+            { id: "C001", name: "general", is_member: true, is_private: false },
+            { id: "C002", name: "random", is_member: true, is_private: false },
+            { id: "C003", name: "private", is_member: true, is_private: true },
+          ],
+        },
+        get_unread: { unreadChannels: [] },
+      },
+    });
+    await page.locator(".workspace-header").hover();
+    await page.locator(".workspace-menu-btn").click();
+    await page.locator(".context-menu-item").filter({ hasText: "Add Channel" }).click();
+    await expect(page.locator("#add-channel-select")).toContainText("#private");
+    await expect(page.locator("#add-channel-select")).toContainText("#random");
+    await expect(page.locator("#add-channel-select")).not.toContainText("#general");
+    await page.screenshot({ path: testInfo.outputPath("add-channel-dialog-with-options.png") });
   });
 
   test("channel context menu opens on right-click", async ({ page }, testInfo) => {
