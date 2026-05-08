@@ -14,6 +14,7 @@ const userCache = {};
 let disableAvatars = false;
 let rateLimitedMode = false;
 let workspaceName = "Slack";
+let addChannelChoices = [];
 
 // ---------------------------------------------------------------------------
 // Startup
@@ -53,7 +54,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Wire Add Channel dialog buttons
   document.getElementById("btn-add-channel-cancel").addEventListener("click", hideAddChannelDialog);
   document.getElementById("btn-add-channel-confirm").addEventListener("click", addChannel);
-  document.getElementById("add-channel-input").addEventListener("keydown", (e) => {
+  document.getElementById("add-channel-select").addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
       e.preventDefault();
       addChannel();
@@ -373,21 +374,59 @@ function _onDialogKeydown(e) {
 
 function showAddChannelDialog() {
   const dialog = document.getElementById("add-channel-dialog");
-  document.getElementById("add-channel-input").value = "";
-  document.getElementById("add-channel-error").classList.add("hidden");
+  const select = document.getElementById("add-channel-select");
+  const errorEl = document.getElementById("add-channel-error");
+  const confirmBtn = document.getElementById("btn-add-channel-confirm");
+  select.innerHTML = '<option value="">Loading channels…</option>';
+  select.disabled = true;
+  confirmBtn.disabled = true;
+  errorEl.classList.add("hidden");
   dialog.classList.remove("hidden");
-  document.getElementById("add-channel-input").focus();
+  select.focus();
   document.addEventListener("keydown", _onDialogKeydown);
+
+  Promise.all([
+    bg({ type: "get_channels" }),
+    bg({ type: "get_watched_channels" }),
+  ]).then(([chanRes, watchedRes]) => {
+    if (chanRes.error) {
+      errorEl.textContent = `Could not load channels: ${chanRes.error}`;
+      errorEl.classList.remove("hidden");
+      select.innerHTML = '<option value="">No channels available</option>';
+      return;
+    }
+
+    const watchedIds = new Set((watchedRes.channels || []).map((c) => c.id));
+    addChannelChoices = (chanRes.channels || [])
+      .filter((c) => c.is_member && !watchedIds.has(c.id))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    if (addChannelChoices.length === 0) {
+      select.innerHTML = '<option value="">No channels available</option>';
+      return;
+    }
+
+    select.innerHTML = addChannelChoices
+      .map((c) => `<option value="${escHtml(c.id)}">#${escHtml(c.name)}</option>`)
+      .join("");
+    select.disabled = false;
+    confirmBtn.disabled = false;
+  }).catch((e) => {
+    errorEl.textContent = `Could not load channels: ${e.message}`;
+    errorEl.classList.remove("hidden");
+    select.innerHTML = '<option value="">No channels available</option>';
+  });
 }
 
 function hideAddChannelDialog() {
   document.getElementById("add-channel-dialog").classList.add("hidden");
+  addChannelChoices = [];
   document.removeEventListener("keydown", _onDialogKeydown);
 }
 
 async function addChannel() {
-  const input = document.getElementById("add-channel-input").value.trim();
-  if (!input) { return; }
+  const selectedId = document.getElementById("add-channel-select").value;
+  if (!selectedId) { return; }
 
   const errorEl = document.getElementById("add-channel-error");
   const confirmBtn = document.getElementById("btn-add-channel-confirm");
@@ -397,14 +436,12 @@ async function addChannel() {
   errorEl.classList.add("hidden");
 
   try {
-    const res = await bg({ type: "get_channel_info", channelId: input });
-    if (res.error) {
-      errorEl.textContent = `Channel not found: ${res.error}`;
+    const ch = addChannelChoices.find((c) => c.id === selectedId);
+    if (!ch) {
+      errorEl.textContent = "Please pick a valid channel.";
       errorEl.classList.remove("hidden");
       return;
     }
-
-    const ch = res.channel;
     await bg({
       type: "add_watched_channel",
       channel: {

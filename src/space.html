@@ -61,15 +61,8 @@
   <div id="add-channel-dialog" class="dialog-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="add-channel-title">
     <div class="dialog">
       <h3 id="add-channel-title">Add Channel</h3>
-      <p class="dialog-help">Enter the Slack channel ID (e.g. <code>C01234ABCDE</code>) found in the channel URL under <em>/archives/…</em>.</p>
-      <input
-        type="text"
-        id="add-channel-input"
-        class="dialog-input"
-        placeholder="C01234ABCDE"
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <p class="dialog-help">Pick a Slack channel to add.</p>
+      <select id="add-channel-select" class="dialog-input"></select>
       <div id="add-channel-error" class="error-msg hidden"></div>
       <div class="dialog-actions">
         <button id="btn-add-channel-cancel" class="btn btn-secondary">Cancel</button>
