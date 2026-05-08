@@ -431,6 +431,7 @@ test.describe("space.html – v1.2.0 visual appearance", () => {
     await expect(page.locator("#add-channel-dialog")).not.toHaveClass(/hidden/);
     await expect(page.locator("#add-channel-select")).toBeVisible();
     await expect(page.locator("#add-channel-select")).toContainText("No channels available");
+    await expect(page.locator("#btn-add-channel-confirm")).toBeDisabled();
     await page.screenshot({ path: testInfo.outputPath("add-channel-dialog.png") });
   });
 
