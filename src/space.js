@@ -377,7 +377,7 @@ function showAddChannelDialog() {
   const select = document.getElementById("add-channel-select");
   const errorEl = document.getElementById("add-channel-error");
   const confirmBtn = document.getElementById("btn-add-channel-confirm");
-  select.innerHTML = '<option value="">Loading channels…</option>';
+  select.innerHTML = '<option value="">Loading channels...</option>';
   select.disabled = true;
   confirmBtn.disabled = true;
   errorEl.classList.add("hidden");
@@ -391,6 +391,13 @@ function showAddChannelDialog() {
   ]).then(([chanRes, watchedRes]) => {
     if (chanRes.error) {
       errorEl.textContent = `Could not load channels: ${chanRes.error}`;
+      errorEl.classList.remove("hidden");
+      select.innerHTML = '<option value="">No channels available</option>';
+      return;
+    }
+
+    if (watchedRes.error) {
+      errorEl.textContent = `Could not load watched channels: ${watchedRes.error}`;
       errorEl.classList.remove("hidden");
       select.innerHTML = '<option value="">No channels available</option>';
       return;
