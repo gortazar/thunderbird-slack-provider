@@ -430,8 +430,10 @@ test.describe("space.html – v1.2.0 visual appearance", () => {
     await page.locator(".context-menu-item").filter({ hasText: "Add Channel" }).click();
     await expect(page.locator("#add-channel-dialog")).not.toHaveClass(/hidden/);
     await expect(page.locator("#add-channel-select")).toBeVisible();
+    await expect(page.locator("#add-channel-select")).toHaveAttribute("aria-label", "Channel to add");
     await expect(page.locator("#add-channel-select")).toContainText("No channels available");
     await expect(page.locator("#btn-add-channel-confirm")).toBeDisabled();
+    await expect(page.locator("#btn-add-channel-confirm")).toHaveText("Add Channel");
     await page.screenshot({ path: testInfo.outputPath("add-channel-dialog.png") });
   });
 
@@ -455,7 +457,7 @@ test.describe("space.html – v1.2.0 visual appearance", () => {
     await page.locator(".workspace-header").hover();
     await page.locator(".workspace-menu-btn").click();
     await page.locator(".context-menu-item").filter({ hasText: "Add Channel" }).click();
-    await expect(page.locator("#add-channel-select")).toContainText("#private");
+    await expect(page.locator("#add-channel-select")).toContainText("🔒 private");
     await expect(page.locator("#add-channel-select")).toContainText("#random");
     await expect(page.locator("#add-channel-select")).not.toContainText("#general");
     await page.screenshot({ path: testInfo.outputPath("add-channel-dialog-with-options.png") });
