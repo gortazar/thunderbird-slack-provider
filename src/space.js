@@ -15,6 +15,7 @@ let disableAvatars = false;
 let rateLimitedMode = false;
 let workspaceName = "Slack";
 let addChannelChoices = [];
+let addChannelLoadId = 0;
 
 // ---------------------------------------------------------------------------
 // Startup
@@ -377,18 +378,22 @@ function showAddChannelDialog() {
   const select = document.getElementById("add-channel-select");
   const errorEl = document.getElementById("add-channel-error");
   const confirmBtn = document.getElementById("btn-add-channel-confirm");
+  const cancelBtn = document.getElementById("btn-add-channel-cancel");
+  const loadId = ++addChannelLoadId;
   select.innerHTML = '<option value="">Loading channels...</option>';
   select.disabled = true;
   confirmBtn.disabled = true;
+  confirmBtn.textContent = "Add Channel";
   errorEl.classList.add("hidden");
   dialog.classList.remove("hidden");
-  select.focus();
+  cancelBtn.focus();
   document.addEventListener("keydown", _onDialogKeydown);
 
   Promise.all([
     bg({ type: "get_channels" }),
     bg({ type: "get_watched_channels" }),
   ]).then(([chanRes, watchedRes]) => {
+    if (loadId !== addChannelLoadId || dialog.classList.contains("hidden")) { return; }
     if (chanRes.error) {
       errorEl.textContent = `Could not load channels: ${chanRes.error}`;
       errorEl.classList.remove("hidden");
@@ -414,11 +419,13 @@ function showAddChannelDialog() {
     }
 
     select.innerHTML = addChannelChoices
-      .map((c) => `<option value="${escHtml(c.id)}">#${escHtml(c.name)}</option>`)
+      .map((c) => `<option value="${escHtml(c.id)}">${c.is_private ? "🔒 " : "#"}${escHtml(c.name)}</option>`)
       .join("");
     select.disabled = false;
     confirmBtn.disabled = false;
+    select.focus();
   }).catch((e) => {
+    if (loadId !== addChannelLoadId || dialog.classList.contains("hidden")) { return; }
     errorEl.textContent = `Could not load channels: ${e.message}`;
     errorEl.classList.remove("hidden");
     select.innerHTML = '<option value="">No channels available</option>';
@@ -427,6 +434,8 @@ function showAddChannelDialog() {
 
 function hideAddChannelDialog() {
   document.getElementById("add-channel-dialog").classList.add("hidden");
+  document.getElementById("btn-add-channel-confirm").textContent = "Add Channel";
+  addChannelLoadId++;
   addChannelChoices = [];
   document.removeEventListener("keydown", _onDialogKeydown);
 }
