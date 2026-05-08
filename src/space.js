@@ -16,6 +16,7 @@ let rateLimitedMode = false;
 let workspaceName = "Slack";
 let addChannelChoices = [];
 let addChannelLoadId = 0;
+const ADD_CHANNEL_BUTTON_TEXT = "Add Channel";
 
 // ---------------------------------------------------------------------------
 // Startup
@@ -383,7 +384,7 @@ function showAddChannelDialog() {
   select.innerHTML = '<option value="">Loading channels...</option>';
   select.disabled = true;
   confirmBtn.disabled = true;
-  confirmBtn.textContent = "Add Channel";
+  confirmBtn.textContent = ADD_CHANNEL_BUTTON_TEXT;
   errorEl.classList.add("hidden");
   dialog.classList.remove("hidden");
   cancelBtn.focus();
@@ -393,7 +394,8 @@ function showAddChannelDialog() {
     bg({ type: "get_channels" }),
     bg({ type: "get_watched_channels" }),
   ]).then(([chanRes, watchedRes]) => {
-    if (loadId !== addChannelLoadId || dialog.classList.contains("hidden")) { return; }
+    if (loadId !== addChannelLoadId) { return; } // Ignore stale async responses
+    if (dialog.classList.contains("hidden")) { return; } // Ignore updates for closed dialog
     if (chanRes.error) {
       errorEl.textContent = `Could not load channels: ${chanRes.error}`;
       errorEl.classList.remove("hidden");
@@ -425,7 +427,8 @@ function showAddChannelDialog() {
     confirmBtn.disabled = false;
     select.focus();
   }).catch((e) => {
-    if (loadId !== addChannelLoadId || dialog.classList.contains("hidden")) { return; }
+    if (loadId !== addChannelLoadId) { return; } // Ignore stale async responses
+    if (dialog.classList.contains("hidden")) { return; } // Ignore updates for closed dialog
     errorEl.textContent = `Could not load channels: ${e.message}`;
     errorEl.classList.remove("hidden");
     select.innerHTML = '<option value="">No channels available</option>';
@@ -434,7 +437,7 @@ function showAddChannelDialog() {
 
 function hideAddChannelDialog() {
   document.getElementById("add-channel-dialog").classList.add("hidden");
-  document.getElementById("btn-add-channel-confirm").textContent = "Add Channel";
+  document.getElementById("btn-add-channel-confirm").textContent = ADD_CHANNEL_BUTTON_TEXT;
   addChannelLoadId++;
   addChannelChoices = [];
   document.removeEventListener("keydown", _onDialogKeydown);
@@ -478,7 +481,7 @@ async function addChannel() {
     errorEl.classList.remove("hidden");
   } finally {
     confirmBtn.disabled = false;
-    confirmBtn.textContent = "Add Channel";
+    confirmBtn.textContent = ADD_CHANNEL_BUTTON_TEXT;
   }
 }
 
